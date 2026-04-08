@@ -35,7 +35,7 @@ Write-Host ""
 # ─── Setup ────────────────────────────────────────────────────────────────────
 
 if (Test-Path $OUT_DIR) { Remove-Item $OUT_DIR -Recurse -Force }
-foreach ($sub in @("tier1","tier2","tier3","formats","crawl","failures","edge","selectors","perf")) {
+foreach ($sub in @("tier1","tier2","formats","crawl","failures","edge","selectors","perf")) {
     New-Item -ItemType Directory -Path "$OUT_DIR\$sub" -Force | Out-Null
 }
 
@@ -292,7 +292,7 @@ Run-Test "redis/set-command" "$OUT_DIR\tier1\redis-set.md"            @($RAWDOC,
 
 # ── Tier 2: Cloudflare / TLS Spoofing ────────────────────────────────────────
 
-Section "TIER 2 — Cloudflare / utls spoofing"
+Section "Cloudflare-protected sites (Tier 1 with browser headers)"
 
 Run-Test "baeldung/spring-kafka"    "$OUT_DIR\tier2\baeldung-spring-kafka.md"  @($RAWDOC, "https://www.baeldung.com/spring-kafka", "-v")
 Run-Test "baeldung/jpa-query"       "$OUT_DIR\tier2\baeldung-jpa-query.md"     @($RAWDOC, "https://www.baeldung.com/spring-data-jpa-query", "-v")
@@ -303,12 +303,6 @@ Run-Test "digitalocean/nginx-tutorial" "$OUT_DIR\tier2\do-nginx.md"           @(
 
 # ── Tier 3: JS Rendered ──────────────────────────────────────────────────────
 
-Section "TIER 3 — JS rendered (headless Chrome)"
-
-Run-Test "react.dev/learn"        "$OUT_DIR\tier3\react-learn.md"    @($RAWDOC, "https://react.dev/learn", "-v")
-Run-Test "github-docs/actions"    "$OUT_DIR\tier3\github-actions.md" @($RAWDOC, "https://docs.github.com/en/actions", "-v")
-Run-Test "nextjs/getting-started" "$OUT_DIR\tier3\nextjs-start.md"   @($RAWDOC, "https://nextjs.org/docs/getting-started/installation", "-v")
-Run-Test "azure/aks-intro"        "$OUT_DIR\tier3\azure-aks.md"      @($RAWDOC, "https://learn.microsoft.com/en-us/azure/aks/intro-kubernetes", "-v")
 
 # ── Output Formats ────────────────────────────────────────────────────────────
 
@@ -367,7 +361,6 @@ Section "FLAG COMBINATIONS"
 Run-Test "flags/code-only+baeldung"   "$OUT_DIR\edge\baeldung-code-only.md" @($RAWDOC, "https://www.baeldung.com/spring-kafka", "--code-only", "-v")
 Run-Test "flags/json+baeldung"        "$OUT_DIR\edge\baeldung-json.json"    @($RAWDOC, "https://www.baeldung.com/spring-kafka", "-f", "json", "-v")
 Run-Test "flags/no-links+mdn"         "$OUT_DIR\edge\mdn-no-links.md"       @($RAWDOC, "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status", "--no-links", "-v")
-Run-Test "flags/no-headless+react"    "$OUT_DIR\edge\react-no-headless.md"  @($RAWDOC, "https://react.dev/learn", "--no-headless", "-v")
 Run-Test "flags/timeout-short"        "$OUT_DIR\edge\timeout-short.md"      @($RAWDOC, "https://kubernetes.io/docs/concepts/workloads/pods/", "--timeout", "2s", "-v")
 Run-Test "flags/custom-header"        "$OUT_DIR\edge\custom-header.md"      @($RAWDOC, "https://kubernetes.io/docs/concepts/workloads/pods/", "-header", "X-Test=rawdoc", "-v")
 

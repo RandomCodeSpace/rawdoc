@@ -36,8 +36,6 @@ type config struct {
 	maxTime    time.Duration
 	maxRetries int
 	headers    headerFlags
-	noHeadless bool
-
 	// Info
 	verbose bool
 	quiet   bool
@@ -77,8 +75,6 @@ func main() {
 	flag.DurationVar(&cfg.maxTime, "max-time", 10*time.Minute, "Total runtime ceiling")
 	flag.IntVar(&cfg.maxRetries, "max-retries", 3, "Per-URL retries")
 	flag.Var(&cfg.headers, "header", "Extra header K=V (repeatable)")
-	flag.BoolVar(&cfg.noHeadless, "no-headless", false, "Disable Chrome fallback tier")
-
 	flag.BoolVar(&cfg.verbose, "v", false, "Log fetch/tier decisions to stderr")
 	flag.BoolVar(&cfg.verbose, "verbose", false, "Log fetch/tier decisions to stderr")
 	flag.BoolVar(&cfg.quiet, "q", false, "Suppress all stderr output")
@@ -165,7 +161,6 @@ func reorderArgs() {
 func isBoolFlag(name string) bool {
 	boolFlags := map[string]bool{
 		"code-only": true, "no-links": true, "sitemap": true,
-		"no-headless": true,
 		"v": true, "verbose": true, "q": true, "quiet": true,
 		"version": true,
 	}
@@ -185,7 +180,6 @@ func runSingle(cfg *config, u *url.URL) error {
 		maxRetries: cfg.maxRetries,
 		verbose:    cfg.verbose,
 		quiet:      cfg.quiet,
-		noHeadless: cfg.noHeadless,
 		headers:    []string(cfg.headers),
 	}
 
@@ -206,27 +200,6 @@ func runSingle(cfg *config, u *url.URL) error {
 	content := extractContent(doc, u.Host)
 	markdown := convertToMarkdown(content)
 	markdown = optimizeMarkdown(markdown)
-
-	// If content is suspiciously thin and we fetched with Tier 1/2,
-	// the page is likely JS-rendered. Try Chrome if available.
-	if len(strings.TrimSpace(markdown)) < 100 && result.tier < 3 && !cfg.noHeadless {
-		if cfg.verbose {
-			fmt.Fprintf(stderr, "[tier%d] %s → thin content (%dB), trying headless Chrome\n",
-				result.tier, u.String(), len(markdown))
-		}
-		chromeResult, chromeErr := fetchTier2(u.String(), opts)
-		if chromeErr == nil {
-			result = chromeResult
-			doc, _ = goquery.NewDocumentFromReader(strings.NewReader(result.html))
-			rawHTMLSize = len(result.html)
-			stripNoise(doc)
-			content = extractContent(doc, u.Host)
-			markdown = convertToMarkdown(content)
-			markdown = optimizeMarkdown(markdown)
-		} else if cfg.verbose {
-			fmt.Fprintf(stderr, "[tier2] %s → %v\n", u.String(), chromeErr)
-		}
-	}
 
 	title := strings.TrimSpace(doc.Find("title").Text())
 	description, _ := doc.Find(`meta[name="description"]`).Attr("content")

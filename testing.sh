@@ -39,7 +39,7 @@ echo ""
 # ─── Setup ────────────────────────────────────────────────────────────────────
 
 rm -rf "$OUT_DIR"
-mkdir -p "$OUT_DIR/tier1" "$OUT_DIR/tier2" "$OUT_DIR/tier3" \
+mkdir -p "$OUT_DIR/tier1" "$OUT_DIR/tier2" \
          "$OUT_DIR/formats" "$OUT_DIR/crawl" "$OUT_DIR/failures" \
          "$OUT_DIR/edge" "$OUT_DIR/selectors" "$OUT_DIR/perf"
 
@@ -345,9 +345,9 @@ run_test "redis/set-command" \
     "$OUT_DIR/tier1/redis-set.md" \
     $RAWDOC https://redis.io/docs/latest/commands/set/ -v
 
-# ── Tier 2: Cloudflare / TLS Spoofing ────────────────────────────────────────
+# ── Cloudflare Sites ────────────────────────────────────────────────────────
 
-section "TIER 2 — Cloudflare / utls spoofing"
+section "Cloudflare-protected sites (Tier 1 with browser headers)"
 
 run_test "baeldung/spring-kafka" \
     "$OUT_DIR/tier2/baeldung-spring-kafka.md" \
@@ -372,26 +372,6 @@ run_test "baeldung/java-streams" \
 run_test "digitalocean/nginx-tutorial" \
     "$OUT_DIR/tier2/do-nginx.md" \
     $RAWDOC https://www.digitalocean.com/community/tutorials/how-to-install-nginx-on-ubuntu-22-04 -v
-
-# ── Tier 3: JS Rendered ──────────────────────────────────────────────────────
-
-section "TIER 3 — JS rendered (headless Chrome)"
-
-run_test "react.dev/learn" \
-    "$OUT_DIR/tier3/react-learn.md" \
-    $RAWDOC https://react.dev/learn -v
-
-run_test "github-docs/actions" \
-    "$OUT_DIR/tier3/github-actions.md" \
-    $RAWDOC https://docs.github.com/en/actions -v
-
-run_test "nextjs/getting-started" \
-    "$OUT_DIR/tier3/nextjs-start.md" \
-    $RAWDOC https://nextjs.org/docs/getting-started/installation -v
-
-run_test "azure/aks-intro" \
-    "$OUT_DIR/tier3/azure-aks.md" \
-    $RAWDOC https://learn.microsoft.com/en-us/azure/aks/intro-kubernetes -v
 
 # ── Output Formats ────────────────────────────────────────────────────────────
 
@@ -510,10 +490,6 @@ run_test "flags/json+baeldung" \
 run_test "flags/no-links+mdn" \
     "$OUT_DIR/edge/mdn-no-links.md" \
     $RAWDOC https://developer.mozilla.org/en-US/docs/Web/HTTP/Status --no-links -v
-
-run_test "flags/no-headless+react" \
-    "$OUT_DIR/edge/react-no-headless.md" \
-    $RAWDOC https://react.dev/learn --no-headless -v
 
 run_test "flags/timeout-short" \
     "$OUT_DIR/edge/timeout-short.md" \

@@ -47,12 +47,7 @@ rawdoc https://www.baeldung.com/spring-kafka -v
 
 ## How It Works
 
-Two-tier fetch strategy — auto-escalates when needed:
-
-```
-Tier 1: Plain HTTP (~50ms)     — works for most doc sites
-Tier 2: Headless Chrome (~2s)  — JS-rendered pages, Cloudflare (needs Chrome installed)
-```
+Plain HTTP with full browser headers. Works for most documentation sites. JS-rendered pages (React, Next.js) are not supported — they require a real browser to execute JavaScript.
 
 Processing pipeline: **Fetch → Strip noise → Extract content → Convert to Markdown**
 
@@ -93,7 +88,6 @@ rawdoc [flags] <url>
 | `--max-time duration` | `10m` | Total runtime ceiling |
 | `--max-retries int` | `3` | Per-URL retries |
 | `--header K=V` | — | Extra header (repeatable) |
-| `--no-headless` | — | Disable Chrome fallback tier |
 
 ### Info
 
@@ -228,5 +222,4 @@ GOOS=darwin GOARCH=arm64 go build -o rawdoc-darwin-arm64 .
 | Requirement | Notes |
 |-------------|-------|
 | Go 1.24+ | Required to build from source |
-| Chrome / Chromium | Optional — only needed for Tier 2 (JS-rendered pages, Cloudflare) |
 
