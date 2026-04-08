@@ -113,6 +113,9 @@ run_test() {
         FAIL=$((FAIL + 1))
     fi
 
+    # Save stderr for stats extraction before any cleanup
+    cp "$stderr_file" "$stderr_file.saved" 2>/dev/null
+
     # Stderr tier info (first line only)
     local tier_info=""
     if [ -f "$stderr_file" ] && [ -s "$stderr_file" ]; then
@@ -126,6 +129,15 @@ run_test() {
         printf "  ${DIM}%s${NC}" "$tier_info"
     fi
     echo ""
+
+    # Token stats from stderr (the [stats] line)
+    if [ -f "$stderr_file.saved" ] && [ -s "$stderr_file.saved" ]; then
+        local stats_line
+        stats_line=$(grep '\[stats\]' "$stderr_file.saved" | head -1 | sed 's/\x1b\[[0-9;]*m//g')
+        if [ -n "$stats_line" ]; then
+            printf "   ${DIM}│ %s${NC}\n" "$stats_line"
+        fi
+    fi
 
     # Preview — show first 2 non-empty content lines (dimmed)
     if [ -f "$outfile" ] && [ $size -gt 0 ]; then
@@ -146,7 +158,7 @@ run_test() {
     if [ -s "$stderr_file" ]; then
         cp "$stderr_file" "${outfile%.md}.stderr"
     fi
-    rm -f "$stderr_file"
+    rm -f "$stderr_file" "$stderr_file.saved"
 }
 
 run_test_expect_fail() {
