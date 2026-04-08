@@ -123,3 +123,21 @@ func TestTierEscalationOn403(t *testing.T) {
 		t.Fatal("expected error on 403, got nil")
 	}
 }
+
+func TestTier3SkipsWhenNoChrome(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(403)
+	}))
+	defer server.Close()
+
+	opts := &fetchOptions{
+		timeout:    5 * time.Second,
+		maxRetries: 1,
+		noTLSSpoof: true,
+		noHeadless: false, // allow tier3, but Chrome likely not found in test env
+	}
+	_, err := fetch(server.URL, opts)
+	if err == nil {
+		t.Error("expected error")
+	}
+}
