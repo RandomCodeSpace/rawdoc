@@ -1,7 +1,6 @@
 package main
 
 import (
-	"regexp"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -17,8 +16,43 @@ var killTags = []string{
 // landmarkTags are structural tags that should be removed as noise.
 var landmarkTags = []string{"nav", "footer", "aside"}
 
-// noisePattern matches class/id values that indicate non-content elements.
-var noisePattern = regexp.MustCompile(`(?i)(cookie|consent|gdpr|banner|popup|modal|overlay|newsletter|subscribe|social|share|sidebar|advertisement|ad-|promo|related-posts)`)
+// Pre-built sets for fast tag lookup.
+var killSet = func() map[string]bool {
+	m := make(map[string]bool, len(killTags))
+	for _, t := range killTags {
+		m[t] = true
+	}
+	return m
+}()
+
+var landmarkSet = func() map[string]bool {
+	m := make(map[string]bool, len(landmarkTags))
+	for _, t := range landmarkTags {
+		m[t] = true
+	}
+	return m
+}()
+
+// noiseKeywords are substrings in class/id that indicate non-content elements.
+var noiseKeywords = []string{
+	"cookie", "consent", "gdpr", "banner", "popup", "modal", "overlay",
+	"newsletter", "subscribe", "social", "share", "sidebar",
+	"advertisement", "ad-", "promo", "related-posts",
+}
+
+// isNoisy checks if a string contains any noise keyword (case-insensitive).
+func isNoisy(s string) bool {
+	if s == "" {
+		return false
+	}
+	lower := strings.ToLower(s)
+	for _, kw := range noiseKeywords {
+		if strings.Contains(lower, kw) {
+			return true
+		}
+	}
+	return false
+}
 
 // removeNode detaches a node from its parent.
 func removeNode(n *html.Node) {
@@ -28,117 +62,71 @@ func removeNode(n *html.Node) {
 }
 
 // stripNoise removes non-content elements from the document in-place.
+// Single-pass tree walk — collects all removable nodes, then detaches them.
 func stripNoise(doc *html.Node) {
-	// Build a set for fast lookup of kill tags
-	killSet := make(map[string]bool, len(killTags))
-	for _, tag := range killTags {
-		killSet[tag] = true
-	}
-	landmarkSet := make(map[string]bool, len(landmarkTags))
-	for _, tag := range landmarkTags {
-		landmarkSet[tag] = true
-	}
-
-	// 1 & 2. Kill tags and landmark tags — collect then remove
 	var toRemove []*html.Node
-	var collectKill func(*html.Node)
-	collectKill = func(n *html.Node) {
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			if c.Type == html.ElementNode {
-				if killSet[c.Data] || landmarkSet[c.Data] {
-					toRemove = append(toRemove, c)
-					continue // don't recurse into removed subtrees
-				}
-			}
-			collectKill(c)
-		}
-	}
-	collectKill(doc)
-	for _, n := range toRemove {
-		removeNode(n)
-	}
 
-	// 3. Kill elements with noisy class/id
-	toRemove = toRemove[:0]
-	var collectNoisy func(*html.Node)
-	collectNoisy = func(n *html.Node) {
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			if c.Type == html.ElementNode {
-				class := getAttr(c, "class")
-				id := getAttr(c, "id")
-				if noisePattern.MatchString(class) || noisePattern.MatchString(id) {
-					toRemove = append(toRemove, c)
-					continue
-				}
+			if c.Type == html.CommentNode {
+				toRemove = append(toRemove, c)
+				continue
 			}
-			collectNoisy(c)
-		}
-	}
-	collectNoisy(doc)
-	for _, n := range toRemove {
-		removeNode(n)
-	}
-
-	// 4. Kill header elements that do NOT contain an h1
-	toRemove = toRemove[:0]
-	var collectHeaders func(*html.Node)
-	collectHeaders = func(n *html.Node) {
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			if c.Type == html.ElementNode && c.Data == "header" {
-				if findFirst(c, "h1") == nil {
-					toRemove = append(toRemove, c)
-					continue
-				}
+			if c.Type != html.ElementNode {
+				walk(c)
+				continue
 			}
-			collectHeaders(c)
-		}
-	}
-	collectHeaders(doc)
-	for _, n := range toRemove {
-		removeNode(n)
-	}
 
-	// 5. Kill hidden elements (aria-hidden=true and display:none)
-	toRemove = toRemove[:0]
-	var collectHidden func(*html.Node)
-	collectHidden = func(n *html.Node) {
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			if c.Type == html.ElementNode {
-				if hasAttr(c, "aria-hidden", "true") {
-					toRemove = append(toRemove, c)
-					continue
+			tag := c.Data
+
+			// Kill tags + landmark tags
+			if killSet[tag] || landmarkSet[tag] {
+				toRemove = append(toRemove, c)
+				continue
+			}
+
+			// Header without h1
+			if tag == "header" && findFirst(c, "h1") == nil {
+				toRemove = append(toRemove, c)
+				continue
+			}
+
+			// Hidden elements
+			if hasAttr(c, "aria-hidden", "true") {
+				toRemove = append(toRemove, c)
+				continue
+			}
+
+			// Noisy class/id
+			remove := false
+			for _, a := range c.Attr {
+				if a.Key == "class" || a.Key == "id" {
+					if isNoisy(a.Val) {
+						remove = true
+						break
+					}
 				}
-				style := getAttr(c, "style")
-				if style != "" {
-					normalized := strings.ReplaceAll(style, " ", "")
-					if strings.Contains(normalized, "display:none") {
-						toRemove = append(toRemove, c)
-						continue
+				if a.Key == "style" {
+					if strings.Contains(strings.ReplaceAll(a.Val, " ", ""), "display:none") {
+						remove = true
+						break
 					}
 				}
 			}
-			collectHidden(c)
+			if remove {
+				toRemove = append(toRemove, c)
+				continue
+			}
+
+			walk(c)
 		}
 	}
-	collectHidden(doc)
+	walk(doc)
+
 	for _, n := range toRemove {
 		removeNode(n)
 	}
-
-	// 6. Remove HTML comments
-	var removeComments func(*html.Node)
-	removeComments = func(n *html.Node) {
-		var next *html.Node
-		for c := n.FirstChild; c != nil; c = next {
-			next = c.NextSibling
-			if c.Type == html.CommentNode {
-				n.RemoveChild(c)
-			} else {
-				removeComments(c)
-			}
-		}
-	}
-	removeComments(doc)
 }
 
 // extractContent picks the main content node from the document.
@@ -193,7 +181,7 @@ func extractContent(doc *html.Node, domain string) *html.Node {
 func readabilityScore(n *html.Node) int {
 	class := getAttr(n, "class")
 	id := getAttr(n, "id")
-	if noisePattern.MatchString(class) || noisePattern.MatchString(id) {
+	if isNoisy(class) || isNoisy(id) {
 		return 0
 	}
 
