@@ -122,33 +122,31 @@ run_test() {
         tier_info=$(head -1 "$stderr_file" | sed 's/\x1b\[[0-9;]*m//g' | cut -c1-60)
     fi
 
-    # Console output — one line per test
-    printf "${status_color}%s${NC}  %-45s  %8s  %8s  exit=%d" \
-        "$status_icon" "$name" "$duration_str" "$size_str" "$exit_code"
-    if [ -n "$tier_info" ]; then
-        printf "  ${DIM}%s${NC}" "$tier_info"
-    fi
-    echo ""
-
-    # Token stats from stderr (the [stats] line)
+    # Extract token stats from stderr
+    local tokens_str=""
     if [ -f "$stderr_file.saved" ] && [ -s "$stderr_file.saved" ]; then
         local stats_line
         stats_line=$(grep '\[stats\]' "$stderr_file.saved" | head -1 | sed 's/\x1b\[[0-9;]*m//g')
         if [ -n "$stats_line" ]; then
-            printf "   ${DIM}│ %s${NC}\n" "$stats_line"
+            # Extract "N tokens) | XX% saved" → "N tok ↓XX%"
+            local in_tok out_tok pct
+            in_tok=$(echo "$stats_line" | grep -oP '\((\d+) tokens\)' | head -1 | grep -oP '\d+')
+            pct=$(echo "$stats_line" | grep -oP '\d+% saved' | grep -oP '\d+')
+            if [ -n "$in_tok" ] && [ -n "$pct" ]; then
+                tokens_str="${in_tok}→↓${pct}%"
+            fi
         fi
     fi
 
-    # Preview — show first 2 non-empty content lines (dimmed)
+    # Preview — first non-empty content line
+    local preview=""
     if [ -f "$outfile" ] && [ $size -gt 0 ]; then
-        local preview
-        preview=$(grep -v '^\s*$' "$outfile" 2>/dev/null | head -2 | cut -c1-30)
-        if [ -n "$preview" ]; then
-            echo "$preview" | while IFS= read -r line; do
-                printf "   ${DIM}│ %s${NC}\n" "$line"
-            done
-        fi
+        preview=$(grep -v '^\s*$' "$outfile" 2>/dev/null | head -1 | cut -c1-30)
     fi
+
+    # Console output — single tabular line
+    printf "${status_color}%s${NC}  %-35s %7s %8s  %-18s  ${DIM}%-30s${NC}\n" \
+        "$status_icon" "$name" "$duration_str" "$size_str" "$tokens_str" "$preview"
 
     # Log output
     printf "%-2s %-45s %8s %8s exit=%d %s\n" \
