@@ -84,12 +84,11 @@ function Run-Test {
     $startMs    = [long]([datetime]::UtcNow - [datetime]::new(1970,1,1)).TotalMilliseconds
 
     # Run command, capture stdout to file, stderr to temp file
-    $proc = Start-Process -FilePath $CmdArgs[0] `
-                          -ArgumentList ($CmdArgs[1..($CmdArgs.Count-1)]) `
-                          -RedirectStandardOutput $OutFile `
-                          -RedirectStandardError  $stderrFile `
-                          -NoNewWindow -Wait -PassThru
-    $exitCode = $proc.ExitCode
+    $exe  = $CmdArgs[0]
+    $args = @()
+    if ($CmdArgs.Count -gt 1) { $args = $CmdArgs[1..($CmdArgs.Count-1)] }
+    & $exe @args > $OutFile 2> $stderrFile
+    $exitCode = $LASTEXITCODE
 
     $endMs      = [long]([datetime]::UtcNow - [datetime]::new(1970,1,1)).TotalMilliseconds
     $durationMs = $endMs - $startMs
@@ -167,12 +166,11 @@ function Run-Test-ExpectFail {
     $stderrFile = "$OUT_DIR\.stderr_tmp"
     $startMs    = [long]([datetime]::UtcNow - [datetime]::new(1970,1,1)).TotalMilliseconds
 
-    $proc = Start-Process -FilePath $CmdArgs[0] `
-                          -ArgumentList ($CmdArgs[1..($CmdArgs.Count-1)]) `
-                          -RedirectStandardOutput $OutFile `
-                          -RedirectStandardError  $stderrFile `
-                          -NoNewWindow -Wait -PassThru
-    $exitCode = $proc.ExitCode
+    $exe  = $CmdArgs[0]
+    $args = @()
+    if ($CmdArgs.Count -gt 1) { $args = $CmdArgs[1..($CmdArgs.Count-1)] }
+    & $exe @args > $OutFile 2> $stderrFile
+    $exitCode = $LASTEXITCODE
 
     $endMs      = [long]([datetime]::UtcNow - [datetime]::new(1970,1,1)).TotalMilliseconds
     $durationMs = $endMs - $startMs
@@ -222,11 +220,11 @@ function Run-Crawl-Test {
     $startMs    = [long]([datetime]::UtcNow - [datetime]::new(1970,1,1)).TotalMilliseconds
 
     # Crawl writes to outdir directly — discard stdout
-    $proc = Start-Process -FilePath $CmdArgs[0] `
-                          -ArgumentList ($CmdArgs[1..($CmdArgs.Count-1)]) `
-                          -RedirectStandardError $stderrFile `
-                          -NoNewWindow -Wait -PassThru
-    $exitCode = $proc.ExitCode
+    $exe  = $CmdArgs[0]
+    $args = @()
+    if ($CmdArgs.Count -gt 1) { $args = $CmdArgs[1..($CmdArgs.Count-1)] }
+    & $exe @args > $null 2> $stderrFile
+    $exitCode = $LASTEXITCODE
 
     $endMs      = [long]([datetime]::UtcNow - [datetime]::new(1970,1,1)).TotalMilliseconds
     $durationMs = $endMs - $startMs
@@ -286,7 +284,7 @@ Run-Test "go/effective-go"   "$OUT_DIR\tier1\effective-go.md"         @($RAWDOC,
 Run-Test "spring.io/blog"    "$OUT_DIR\tier1\spring-blog.md"          @($RAWDOC, "https://spring.io/blog", "-v")
 Run-Test "mdn/http-status"   "$OUT_DIR\tier1\mdn-http-status.md"      @($RAWDOC, "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status", "-v")
 Run-Test "postgresql/select" "$OUT_DIR\tier1\pg-select.md"            @($RAWDOC, "https://www.postgresql.org/docs/current/sql-select.html", "-v")
-Run-Test "istio/traffic-mgmt""$OUT_DIR\tier1\istio-traffic.md"        @($RAWDOC, "https://istio.io/latest/docs/concepts/traffic-management/", "-v")
+Run-Test "istio/traffic-mgmt" "$OUT_DIR\tier1\istio-traffic.md"        @($RAWDOC, "https://istio.io/latest/docs/concepts/traffic-management/", "-v")
 Run-Test "helm/chart-templates" "$OUT_DIR\tier1\helm-templates.md"    @($RAWDOC, "https://helm.sh/docs/chart_template_guide/", "-v")
 Run-Test "python/asyncio"    "$OUT_DIR\tier1\python-asyncio.md"       @($RAWDOC, "https://docs.python.org/3/library/asyncio.html", "-v")
 Run-Test "gobyexample/goroutines" "$OUT_DIR\tier1\gobyexample-goroutines.md" @($RAWDOC, "https://gobyexample.com/goroutines", "-v")
@@ -346,7 +344,7 @@ Run-Crawl-Test "crawl/baeldung-spring (depth=1, max=5)" "$OUT_DIR\crawl\baeldung
 Section "FAILURE HANDLING — expected failures"
 
 Run-Test-ExpectFail "fail/invalid-url"       "$OUT_DIR\failures\invalid-url.md"   @($RAWDOC, "not-a-valid-url")
-Run-Test-ExpectFail "fail/nonexistent-domain""$OUT_DIR\failures\nonexistent.md"   @($RAWDOC, "https://this-domain-does-not-exist-xyz123.com/page")
+Run-Test-ExpectFail "fail/nonexistent-domain" "$OUT_DIR\failures\nonexistent.md"   @($RAWDOC, "https://this-domain-does-not-exist-xyz123.com/page")
 Run-Test-ExpectFail "fail/http-403"          "$OUT_DIR\failures\http-403.md"      @($RAWDOC, "https://httpstat.us/403", "-v")
 Run-Test-ExpectFail "fail/http-500"          "$OUT_DIR\failures\http-500.md"      @($RAWDOC, "https://httpstat.us/500", "-v")
 Run-Test-ExpectFail "fail/http-429"          "$OUT_DIR\failures\http-429.md"      @($RAWDOC, "https://httpstat.us/429", "-v")
@@ -369,7 +367,7 @@ Section "FLAG COMBINATIONS"
 Run-Test "flags/code-only+baeldung"   "$OUT_DIR\edge\baeldung-code-only.md" @($RAWDOC, "https://www.baeldung.com/spring-kafka", "--code-only", "-v")
 Run-Test "flags/json+baeldung"        "$OUT_DIR\edge\baeldung-json.json"    @($RAWDOC, "https://www.baeldung.com/spring-kafka", "-f", "json", "-v")
 Run-Test "flags/no-links+mdn"         "$OUT_DIR\edge\mdn-no-links.md"       @($RAWDOC, "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status", "--no-links", "-v")
-Run-Test "flags/no-tls-spoof+baeldung""$OUT_DIR\edge\baeldung-no-spoof.md"  @($RAWDOC, "https://www.baeldung.com/spring-kafka", "--no-tls-spoof", "-v")
+Run-Test "flags/no-tls-spoof+baeldung" "$OUT_DIR\edge\baeldung-no-spoof.md"  @($RAWDOC, "https://www.baeldung.com/spring-kafka", "--no-tls-spoof", "-v")
 Run-Test "flags/no-headless+react"    "$OUT_DIR\edge\react-no-headless.md"  @($RAWDOC, "https://react.dev/learn", "--no-headless", "-v")
 Run-Test "flags/timeout-short"        "$OUT_DIR\edge\timeout-short.md"      @($RAWDOC, "https://kubernetes.io/docs/concepts/workloads/pods/", "--timeout", "2s", "-v")
 Run-Test "flags/custom-header"        "$OUT_DIR\edge\custom-header.md"      @($RAWDOC, "https://kubernetes.io/docs/concepts/workloads/pods/", "-header", "X-Test=rawdoc", "-v")
