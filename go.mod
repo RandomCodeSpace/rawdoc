@@ -1,4 +1,4 @@
-module github.com/rawdoc/rawdoc
+module github.com/RandomCodeSpace/rawdoc
 
 go 1.26.1
 

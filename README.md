@@ -2,7 +2,7 @@
 
 Fetch web pages as clean markdown for AI coding agents.
 
-[![CI](https://github.com/rawdoc/rawdoc/actions/workflows/ci.yml/badge.svg)](https://github.com/rawdoc/rawdoc/actions/workflows/ci.yml)
+[![CI](https://github.com/RandomCodeSpace/rawdoc/actions/workflows/ci.yml/badge.svg)](https://github.com/RandomCodeSpace/rawdoc/actions/workflows/ci.yml)
 
 Single Go binary. No runtime downloads, no external services, no AI, no search.
 
@@ -11,7 +11,7 @@ Single Go binary. No runtime downloads, no external services, no AI, no search.
 ## Install
 
 ```bash
-go install github.com/rawdoc/rawdoc@latest
+go install github.com/RandomCodeSpace/rawdoc@latest
 ```
 
 That's it — single binary, no runtime deps.
@@ -205,7 +205,7 @@ rawdoc https://docs.example.com/api -o /tmp/api-docs.md
 ## Building from Source
 
 ```bash
-git clone https://github.com/rawdoc/rawdoc.git
+git clone https://github.com/RandomCodeSpace/rawdoc.git
 cd rawdoc
 go build -o rawdoc .
 ```

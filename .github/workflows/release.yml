@@ -81,19 +81,26 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Commit version bump and create tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git add main.go
-          git commit -m "release: v${{ steps.version.outputs.version }}"
+          git diff --cached --quiet && echo "No version change to commit" || \
+            git commit -m "release: v${{ steps.version.outputs.version }}"
           git tag "${{ steps.version.outputs.tag }}"
-          git push origin HEAD:main
-          git push origin "${{ steps.version.outputs.tag }}"
+          git push origin HEAD:main --tags
 
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          PREV_TAG="${{ steps.version.outputs.prev_tag }}"
+          NOTES_FLAG=""
+          if [ "$PREV_TAG" != "v0.0.0" ] && git rev-parse "$PREV_TAG" >/dev/null 2>&1; then
+            NOTES_FLAG="--notes-start-tag $PREV_TAG"
+          fi
           gh release create "${{ steps.version.outputs.tag }}" \
             dist/* \
             --title "rawdoc ${{ steps.version.outputs.tag }}" \
             --generate-notes \
-            --notes-start-tag "${{ steps.version.outputs.prev_tag }}"
+            $NOTES_FLAG
