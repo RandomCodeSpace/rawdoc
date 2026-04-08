@@ -142,7 +142,7 @@ run_test() {
     # Preview — show first 2 non-empty content lines (dimmed)
     if [ -f "$outfile" ] && [ $size -gt 0 ]; then
         local preview
-        preview=$(grep -v '^\s*$' "$outfile" 2>/dev/null | head -2 | cut -c1-100)
+        preview=$(grep -v '^\s*$' "$outfile" 2>/dev/null | head -2 | cut -c1-30)
         if [ -n "$preview" ]; then
             echo "$preview" | while IFS= read -r line; do
                 printf "   ${DIM}│ %s${NC}\n" "$line"
