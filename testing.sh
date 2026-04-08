@@ -99,11 +99,11 @@ run_test() {
 
     # Determine status
     local status_icon status_color
-    if [ $exit_code -eq 0 ] && [ $size -gt 0 ]; then
+    if [ $exit_code -eq 0 ] && [ $size -gt 100 ]; then
         status_icon="✓"
         status_color="$GREEN"
         PASS=$((PASS + 1))
-    elif [ $exit_code -eq 0 ] && [ $size -eq 0 ]; then
+    elif [ $exit_code -eq 0 ] && [ $size -le 100 ]; then
         status_icon="⚠"
         status_color="$YELLOW"
         SKIP=$((SKIP + 1))

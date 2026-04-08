@@ -210,6 +210,27 @@ func runSingle(cfg *config, u *url.URL) error {
 	markdown := convertToMarkdown(content)
 	markdown = optimizeMarkdown(markdown)
 
+	// If content is suspiciously thin and we fetched with Tier 1/2,
+	// the page is likely JS-rendered. Try Chrome if available.
+	if len(strings.TrimSpace(markdown)) < 100 && result.tier < 3 && !cfg.noHeadless {
+		if cfg.verbose {
+			fmt.Fprintf(stderr, "[tier%d] %s → thin content (%dB), trying headless Chrome\n",
+				result.tier, u.String(), len(markdown))
+		}
+		chromeResult, chromeErr := fetchTier3(u.String(), opts)
+		if chromeErr == nil {
+			result = chromeResult
+			doc, _ = goquery.NewDocumentFromReader(strings.NewReader(result.html))
+			rawHTMLSize = len(result.html)
+			stripNoise(doc)
+			content = extractContent(doc, u.Host)
+			markdown = convertToMarkdown(content)
+			markdown = optimizeMarkdown(markdown)
+		} else if cfg.verbose {
+			fmt.Fprintf(stderr, "[tier3] %s → %v\n", u.String(), chromeErr)
+		}
+	}
+
 	title := strings.TrimSpace(doc.Find("title").Text())
 	description, _ := doc.Find(`meta[name="description"]`).Attr("content")
 	description = strings.TrimSpace(description)
