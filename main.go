@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
 )
 
 var version = "0.1.0"
@@ -188,7 +188,7 @@ func runSingle(cfg *config, u *url.URL) error {
 		return fmt.Errorf("fetch: %w", err)
 	}
 
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(result.html))
+	doc, err := html.Parse(strings.NewReader(result.html))
 	if err != nil {
 		return fmt.Errorf("parse HTML: %w", err)
 	}
@@ -201,9 +201,22 @@ func runSingle(cfg *config, u *url.URL) error {
 	markdown := convertToMarkdown(content)
 	markdown = optimizeMarkdown(markdown)
 
-	title := strings.TrimSpace(doc.Find("title").Text())
-	description, _ := doc.Find(`meta[name="description"]`).Attr("content")
-	description = strings.TrimSpace(description)
+	title := ""
+	if titleNode := findFirst(doc, "title"); titleNode != nil {
+		title = strings.TrimSpace(textContent(titleNode))
+	}
+	description := ""
+	var findMeta func(*html.Node)
+	findMeta = func(n *html.Node) {
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.ElementNode && c.Data == "meta" && getAttr(c, "name") == "description" {
+				description = strings.TrimSpace(getAttr(c, "content"))
+				return
+			}
+			findMeta(c)
+		}
+	}
+	findMeta(doc)
 
 	outputSize, err := writeOutput(cfg, result.url, title, description, markdown, result)
 	if err != nil {

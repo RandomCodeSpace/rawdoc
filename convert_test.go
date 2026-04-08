@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
 )
 
-func docFromHTML(html string) *goquery.Document {
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+func parseHTML(s string) *html.Node {
+	doc, err := html.Parse(strings.NewReader(s))
 	if err != nil {
 		panic(err)
 	}
@@ -16,14 +16,14 @@ func docFromHTML(html string) *goquery.Document {
 }
 
 func TestConvertHeadings(t *testing.T) {
-	html := `<h1>Heading 1</h1>
+	h := `<h1>Heading 1</h1>
 <h2>Heading 2</h2>
 <h3>Heading 3</h3>
 <h4>Heading 4</h4>
 <h5>Heading 5</h5>
 <h6>Heading 6</h6>`
-	doc := docFromHTML(html)
-	result := convertToMarkdown(doc.Selection)
+	doc := parseHTML(h)
+	result := convertToMarkdown(doc)
 	tests := []string{
 		"# Heading 1",
 		"## Heading 2",
@@ -40,9 +40,9 @@ func TestConvertHeadings(t *testing.T) {
 }
 
 func TestConvertParagraphs(t *testing.T) {
-	html := `<p>First paragraph.</p><p>Second paragraph.</p>`
-	doc := docFromHTML(html)
-	result := convertToMarkdown(doc.Selection)
+	h := `<p>First paragraph.</p><p>Second paragraph.</p>`
+	doc := parseHTML(h)
+	result := convertToMarkdown(doc)
 	if !strings.Contains(result, "First paragraph.") {
 		t.Errorf("missing first paragraph in:\n%s", result)
 	}
@@ -56,9 +56,9 @@ func TestConvertParagraphs(t *testing.T) {
 }
 
 func TestConvertCodeBlocks(t *testing.T) {
-	html := `<pre><code class="language-go">fmt.Println("hello")</code></pre>`
-	doc := docFromHTML(html)
-	result := convertToMarkdown(doc.Selection)
+	h := `<pre><code class="language-go">fmt.Println("hello")</code></pre>`
+	doc := parseHTML(h)
+	result := convertToMarkdown(doc)
 	if !strings.Contains(result, "```go") {
 		t.Errorf("expected ```go fenced block in:\n%s", result)
 	}
@@ -71,18 +71,18 @@ func TestConvertCodeBlocks(t *testing.T) {
 }
 
 func TestConvertInlineCode(t *testing.T) {
-	html := `<p>Call <code>fmt.Println</code> here.</p>`
-	doc := docFromHTML(html)
-	result := convertToMarkdown(doc.Selection)
+	h := `<p>Call <code>fmt.Println</code> here.</p>`
+	doc := parseHTML(h)
+	result := convertToMarkdown(doc)
 	if !strings.Contains(result, "`fmt.Println`") {
 		t.Errorf("expected inline code `fmt.Println` in:\n%s", result)
 	}
 }
 
 func TestConvertUnorderedList(t *testing.T) {
-	html := `<ul><li>Apple</li><li>Banana</li><li>Cherry</li></ul>`
-	doc := docFromHTML(html)
-	result := convertToMarkdown(doc.Selection)
+	h := `<ul><li>Apple</li><li>Banana</li><li>Cherry</li></ul>`
+	doc := parseHTML(h)
+	result := convertToMarkdown(doc)
 	for _, item := range []string{"- Apple", "- Banana", "- Cherry"} {
 		if !strings.Contains(result, item) {
 			t.Errorf("expected %q in:\n%s", item, result)
@@ -91,9 +91,9 @@ func TestConvertUnorderedList(t *testing.T) {
 }
 
 func TestConvertOrderedList(t *testing.T) {
-	html := `<ol><li>First</li><li>Second</li><li>Third</li></ol>`
-	doc := docFromHTML(html)
-	result := convertToMarkdown(doc.Selection)
+	h := `<ol><li>First</li><li>Second</li><li>Third</li></ol>`
+	doc := parseHTML(h)
+	result := convertToMarkdown(doc)
 	for _, item := range []string{"1. First", "2. Second", "3. Third"} {
 		if !strings.Contains(result, item) {
 			t.Errorf("expected %q in:\n%s", item, result)
@@ -102,18 +102,18 @@ func TestConvertOrderedList(t *testing.T) {
 }
 
 func TestConvertLinks(t *testing.T) {
-	html := `<a href="https://example.com">Example</a>`
-	doc := docFromHTML(html)
-	result := convertToMarkdown(doc.Selection)
+	h := `<a href="https://example.com">Example</a>`
+	doc := parseHTML(h)
+	result := convertToMarkdown(doc)
 	if !strings.Contains(result, "[Example](https://example.com)") {
 		t.Errorf("expected markdown link in:\n%s", result)
 	}
 }
 
 func TestConvertBoldItalic(t *testing.T) {
-	html := `<strong>bold text</strong> and <em>italic text</em>`
-	doc := docFromHTML(html)
-	result := convertToMarkdown(doc.Selection)
+	h := `<strong>bold text</strong> and <em>italic text</em>`
+	doc := parseHTML(h)
+	result := convertToMarkdown(doc)
 	if !strings.Contains(result, "**bold text**") {
 		t.Errorf("expected **bold text** in:\n%s", result)
 	}
@@ -123,12 +123,12 @@ func TestConvertBoldItalic(t *testing.T) {
 }
 
 func TestConvertTable(t *testing.T) {
-	html := `<table>
+	h := `<table>
 		<thead><tr><th>Name</th><th>Age</th></tr></thead>
 		<tbody><tr><td>Alice</td><td>30</td></tr></tbody>
 	</table>`
-	doc := docFromHTML(html)
-	result := convertToMarkdown(doc.Selection)
+	doc := parseHTML(h)
+	result := convertToMarkdown(doc)
 	if !strings.Contains(result, "| Name | Age |") {
 		t.Errorf("expected header row in:\n%s", result)
 	}
@@ -141,36 +141,36 @@ func TestConvertTable(t *testing.T) {
 }
 
 func TestConvertBlockquote(t *testing.T) {
-	html := `<blockquote><p>This is a quote.</p></blockquote>`
-	doc := docFromHTML(html)
-	result := convertToMarkdown(doc.Selection)
+	h := `<blockquote><p>This is a quote.</p></blockquote>`
+	doc := parseHTML(h)
+	result := convertToMarkdown(doc)
 	if !strings.Contains(result, "> This is a quote.") {
 		t.Errorf("expected > prefixed blockquote in:\n%s", result)
 	}
 }
 
 func TestConvertHorizontalRule(t *testing.T) {
-	html := `<p>Before</p><hr><p>After</p>`
-	doc := docFromHTML(html)
-	result := convertToMarkdown(doc.Selection)
+	h := `<p>Before</p><hr><p>After</p>`
+	doc := parseHTML(h)
+	result := convertToMarkdown(doc)
 	if !strings.Contains(result, "---") {
 		t.Errorf("expected --- horizontal rule in:\n%s", result)
 	}
 }
 
 func TestConvertImage(t *testing.T) {
-	html := `<img src="photo.png" alt="A photo">`
-	doc := docFromHTML(html)
-	result := convertToMarkdown(doc.Selection)
+	h := `<img src="photo.png" alt="A photo">`
+	doc := parseHTML(h)
+	result := convertToMarkdown(doc)
 	if !strings.Contains(result, "![A photo](photo.png)") {
 		t.Errorf("expected ![A photo](photo.png) in:\n%s", result)
 	}
 }
 
 func TestConvertDefinitionList(t *testing.T) {
-	html := `<dl><dt>Term</dt><dd>Definition of term.</dd></dl>`
-	doc := docFromHTML(html)
-	result := convertToMarkdown(doc.Selection)
+	h := `<dl><dt>Term</dt><dd>Definition of term.</dd></dl>`
+	doc := parseHTML(h)
+	result := convertToMarkdown(doc)
 	if !strings.Contains(result, "**Term**") {
 		t.Errorf("expected **Term** in:\n%s", result)
 	}
@@ -180,15 +180,15 @@ func TestConvertDefinitionList(t *testing.T) {
 }
 
 func TestConvertNestedList(t *testing.T) {
-	html := `<ul>
+	h := `<ul>
 		<li>Parent
 			<ul>
 				<li>Child</li>
 			</ul>
 		</li>
 	</ul>`
-	doc := docFromHTML(html)
-	result := convertToMarkdown(doc.Selection)
+	doc := parseHTML(h)
+	result := convertToMarkdown(doc)
 	if !strings.Contains(result, "- Parent") {
 		t.Errorf("expected parent list item in:\n%s", result)
 	}

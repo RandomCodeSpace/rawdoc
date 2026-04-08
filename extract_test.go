@@ -6,140 +6,146 @@ import (
 )
 
 func TestStripScriptAndStyle(t *testing.T) {
-	html := `<html><body>
+	h := `<html><body>
 		<script>alert("evil")</script>
 		<style>body { color: red; }</style>
 		<p>Keep this paragraph.</p>
 	</body></html>`
-	doc := docFromHTML(html)
+	doc := parseHTML(h)
 	stripNoise(doc)
 
-	body := doc.Find("body").Text()
-	if strings.Contains(body, "alert") {
+	body := findFirst(doc, "body")
+	bodyText := textContent(body)
+	if strings.Contains(bodyText, "alert") {
 		t.Error("script content should be removed")
 	}
-	if strings.Contains(body, "color: red") {
+	if strings.Contains(bodyText, "color: red") {
 		t.Error("style content should be removed")
 	}
-	if !strings.Contains(body, "Keep this paragraph.") {
+	if !strings.Contains(bodyText, "Keep this paragraph.") {
 		t.Error("paragraph content should be kept")
 	}
 }
 
 func TestStripNavFooter(t *testing.T) {
-	html := `<html><body>
+	h := `<html><body>
 		<nav>Navigation links here</nav>
 		<main><p>Main content here.</p></main>
 		<footer>Footer text here</footer>
 	</body></html>`
-	doc := docFromHTML(html)
+	doc := parseHTML(h)
 	stripNoise(doc)
 
-	if doc.Find("nav").Length() != 0 {
+	if findFirst(doc, "nav") != nil {
 		t.Error("nav should be removed")
 	}
-	if doc.Find("footer").Length() != 0 {
+	if findFirst(doc, "footer") != nil {
 		t.Error("footer should be removed")
 	}
-	if doc.Find("main").Length() == 0 {
+	mainNode := findFirst(doc, "main")
+	if mainNode == nil {
 		t.Error("main content should be kept")
 	}
-	if !strings.Contains(doc.Find("main").Text(), "Main content here.") {
+	if !strings.Contains(textContent(mainNode), "Main content here.") {
 		t.Error("main content text should be kept")
 	}
 }
 
 func TestStripNoiseByClass(t *testing.T) {
-	html := `<html><body>
+	h := `<html><body>
 		<div class="cookie-consent">Accept cookies</div>
 		<div class="sidebar">Sidebar links</div>
 		<div class="newsletter">Subscribe now!</div>
 		<article class="post">Real article content.</article>
 	</body></html>`
-	doc := docFromHTML(html)
+	doc := parseHTML(h)
 	stripNoise(doc)
 
-	body := doc.Find("body").Text()
-	if strings.Contains(body, "Accept cookies") {
+	body := findFirst(doc, "body")
+	bodyText := textContent(body)
+	if strings.Contains(bodyText, "Accept cookies") {
 		t.Error("cookie-consent element should be removed")
 	}
-	if strings.Contains(body, "Sidebar links") {
+	if strings.Contains(bodyText, "Sidebar links") {
 		t.Error("sidebar element should be removed")
 	}
-	if strings.Contains(body, "Subscribe now!") {
+	if strings.Contains(bodyText, "Subscribe now!") {
 		t.Error("newsletter element should be removed")
 	}
-	if !strings.Contains(body, "Real article content.") {
+	if !strings.Contains(bodyText, "Real article content.") {
 		t.Error("article content should be kept")
 	}
 }
 
 func TestStripHiddenElements(t *testing.T) {
-	html := `<html><body>
+	h := `<html><body>
 		<div style="display:none">Hidden div</div>
 		<div style="display: none">Also hidden</div>
 		<div aria-hidden="true">Aria hidden</div>
 		<p>Visible paragraph.</p>
 	</body></html>`
-	doc := docFromHTML(html)
+	doc := parseHTML(h)
 	stripNoise(doc)
 
-	body := doc.Find("body").Text()
-	if strings.Contains(body, "Hidden div") {
+	body := findFirst(doc, "body")
+	bodyText := textContent(body)
+	if strings.Contains(bodyText, "Hidden div") {
 		t.Error("display:none element should be removed")
 	}
-	if strings.Contains(body, "Also hidden") {
+	if strings.Contains(bodyText, "Also hidden") {
 		t.Error("display: none element should be removed")
 	}
-	if strings.Contains(body, "Aria hidden") {
+	if strings.Contains(bodyText, "Aria hidden") {
 		t.Error("aria-hidden element should be removed")
 	}
-	if !strings.Contains(body, "Visible paragraph.") {
+	if !strings.Contains(bodyText, "Visible paragraph.") {
 		t.Error("visible paragraph should be kept")
 	}
 }
 
 func TestStripHeaderWithoutH1(t *testing.T) {
-	html := `<html><body>
+	h := `<html><body>
 		<header><nav>Site nav</nav></header>
 		<main><p>Content here.</p></main>
 	</body></html>`
-	doc := docFromHTML(html)
+	doc := parseHTML(h)
 	stripNoise(doc)
 
-	if doc.Find("header").Length() != 0 {
+	if findFirst(doc, "header") != nil {
 		t.Error("header without h1 should be removed")
 	}
-	if !strings.Contains(doc.Find("main").Text(), "Content here.") {
+	mainNode := findFirst(doc, "main")
+	if !strings.Contains(textContent(mainNode), "Content here.") {
 		t.Error("main content should be kept")
 	}
 }
 
 func TestKeepHeaderWithH1(t *testing.T) {
-	html := `<html><body>
+	h := `<html><body>
 		<header><h1>Page Title</h1></header>
 		<main><p>Content here.</p></main>
 	</body></html>`
-	doc := docFromHTML(html)
+	doc := parseHTML(h)
 	stripNoise(doc)
 
-	if doc.Find("header").Length() == 0 {
+	header := findFirst(doc, "header")
+	if header == nil {
 		t.Error("header with h1 should be kept")
 	}
-	if !strings.Contains(doc.Find("header").Text(), "Page Title") {
+	if !strings.Contains(textContent(header), "Page Title") {
 		t.Error("h1 in header should be kept")
 	}
 }
 
 func TestExtractMainContent(t *testing.T) {
-	html := `<html><body>
+	h := `<html><body>
 		<aside>Sidebar content</aside>
 		<main><article><p>Main article content.</p></article></main>
 	</body></html>`
-	doc := docFromHTML(html)
+	doc := parseHTML(h)
 	sel := extractContent(doc, "example.com")
 
-	text := strings.TrimSpace(sel.Text())
+	text := strings.TrimSpace(textContent(sel))
 	if !strings.Contains(text, "Main article content.") {
 		t.Errorf("expected main article content, got: %s", text)
 	}
@@ -149,38 +155,33 @@ func TestExtractMainContent(t *testing.T) {
 }
 
 func TestExtractArticleTag(t *testing.T) {
-	html := `<html><body>
+	h := `<html><body>
 		<div class="wrapper">
 			<article><p>Article body text.</p></article>
 		</div>
 	</body></html>`
-	doc := docFromHTML(html)
+	doc := parseHTML(h)
 	sel := extractContent(doc, "example.com")
 
-	if sel.Is("article") || sel.Find("article").Length() > 0 || strings.Contains(strings.TrimSpace(sel.Text()), "Article body text.") {
-		// pass: article tag was selected or found in selection
-	} else {
-		t.Errorf("expected article content to be selected, got node: %s, text: %s", sel.Nodes[0].Data, sel.Text())
-	}
-
-	if !strings.Contains(sel.Text(), "Article body text.") {
-		t.Errorf("expected article text in selection, got: %s", sel.Text())
+	text := textContent(sel)
+	if !strings.Contains(text, "Article body text.") {
+		t.Errorf("expected article text in selection, got: %s", text)
 	}
 }
 
 func TestExtractFallsBackToBody(t *testing.T) {
-	html := `<html><body>
+	h := `<html><body>
 		<div><p>Some content without semantic tags.</p></div>
 	</body></html>`
-	doc := docFromHTML(html)
+	doc := parseHTML(h)
 
 	// Use a domain with no site selector and HTML with no semantic tags
 	sel := extractContent(doc, "no-semantic-site.example.com")
 
-	if sel == nil || sel.Length() == 0 {
-		t.Fatal("expected a selection to be returned")
+	if sel == nil {
+		t.Fatal("expected a node to be returned")
 	}
-	if !strings.Contains(sel.Text(), "Some content without semantic tags.") {
-		t.Errorf("expected body content, got: %s", sel.Text())
+	if !strings.Contains(textContent(sel), "Some content without semantic tags.") {
+		t.Errorf("expected body content, got: %s", textContent(sel))
 	}
 }

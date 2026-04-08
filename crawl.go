@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
 )
 
 // urlSet is a thread-safe set of visited URLs.
@@ -108,14 +108,15 @@ func pathMatchesGlob(urlPath, pattern string) bool {
 }
 
 // extractLinks finds all same-domain http/https links in the document.
-func extractLinks(doc *goquery.Document, base *url.URL) []string {
+func extractLinks(doc *html.Node, base *url.URL) []string {
 	var links []string
 	seen := make(map[string]bool)
 
-	doc.Find("a[href]").Each(func(_ int, s *goquery.Selection) {
-		href, exists := s.Attr("href")
-		if !exists {
-			return
+	anchors := findAll(doc, "a")
+	for _, a := range anchors {
+		href := getAttr(a, "href")
+		if href == "" {
+			continue
 		}
 		href = strings.TrimSpace(href)
 		// Skip special schemes and fragment-only links
@@ -125,22 +126,22 @@ func extractLinks(doc *goquery.Document, base *url.URL) []string {
 			strings.HasPrefix(lower, "tel:") ||
 			href == "#" ||
 			strings.HasPrefix(href, "#") {
-			return
+			continue
 		}
 
 		resolved, err := base.Parse(href)
 		if err != nil {
-			return
+			continue
 		}
 
 		// Only http/https
 		if resolved.Scheme != "http" && resolved.Scheme != "https" {
-			return
+			continue
 		}
 
 		// Same domain only
 		if !isSameDomain(href, base) {
-			return
+			continue
 		}
 
 		norm := normalizeURL(resolved.String())
@@ -148,7 +149,7 @@ func extractLinks(doc *goquery.Document, base *url.URL) []string {
 			seen[norm] = true
 			links = append(links, resolved.String())
 		}
-	})
+	}
 	return links
 }
 
@@ -300,7 +301,7 @@ func fetchPage(rawURL string, opts *fetchOptions, cfg *config) (crawlResult, []s
 		return crawlResult{url: rawURL, err: err}, nil
 	}
 
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(result.html))
+	doc, err := html.Parse(strings.NewReader(result.html))
 	if err != nil {
 		return crawlResult{url: rawURL, err: fmt.Errorf("parse HTML: %w", err)}, nil
 	}
@@ -315,7 +316,10 @@ func fetchPage(rawURL string, opts *fetchOptions, cfg *config) (crawlResult, []s
 	stripNoise(doc)
 	content := extractContent(doc, base.Host)
 	markdown := optimizeMarkdown(convertToMarkdown(content))
-	title := strings.TrimSpace(doc.Find("title").Text())
+	title := ""
+	if titleNode := findFirst(doc, "title"); titleNode != nil {
+		title = strings.TrimSpace(textContent(titleNode))
+	}
 
 	return crawlResult{
 		url:      result.url,

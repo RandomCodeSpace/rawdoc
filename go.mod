@@ -2,9 +2,4 @@ module github.com/RandomCodeSpace/rawdoc
 
 go 1.25.0
 
-require (
-	github.com/PuerkitoBio/goquery v1.12.0
-	golang.org/x/net v0.52.0
-)
-
-require github.com/andybalholm/cascadia v1.3.3 // indirect
+require golang.org/x/net v0.52.0

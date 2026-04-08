@@ -4,7 +4,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/PuerkitoBio/goquery"
 	"golang.org/x/net/html"
 )
 
@@ -21,45 +20,110 @@ var landmarkTags = []string{"nav", "footer", "aside"}
 // noisePattern matches class/id values that indicate non-content elements.
 var noisePattern = regexp.MustCompile(`(?i)(cookie|consent|gdpr|banner|popup|modal|overlay|newsletter|subscribe|social|share|sidebar|advertisement|ad-|promo|related-posts)`)
 
+// removeNode detaches a node from its parent.
+func removeNode(n *html.Node) {
+	if n.Parent != nil {
+		n.Parent.RemoveChild(n)
+	}
+}
+
 // stripNoise removes non-content elements from the document in-place.
-func stripNoise(doc *goquery.Document) {
-	// 1. Kill tags entirely (tag + contents)
+func stripNoise(doc *html.Node) {
+	// Build a set for fast lookup of kill tags
+	killSet := make(map[string]bool, len(killTags))
 	for _, tag := range killTags {
-		doc.Find(tag).Remove()
+		killSet[tag] = true
+	}
+	landmarkSet := make(map[string]bool, len(landmarkTags))
+	for _, tag := range landmarkTags {
+		landmarkSet[tag] = true
 	}
 
-	// 2. Kill landmark tags
-	for _, tag := range landmarkTags {
-		doc.Find(tag).Remove()
+	// 1 & 2. Kill tags and landmark tags — collect then remove
+	var toRemove []*html.Node
+	var collectKill func(*html.Node)
+	collectKill = func(n *html.Node) {
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.ElementNode {
+				if killSet[c.Data] || landmarkSet[c.Data] {
+					toRemove = append(toRemove, c)
+					continue // don't recurse into removed subtrees
+				}
+			}
+			collectKill(c)
+		}
+	}
+	collectKill(doc)
+	for _, n := range toRemove {
+		removeNode(n)
 	}
 
 	// 3. Kill elements with noisy class/id
-	doc.Find("*").Each(func(_ int, s *goquery.Selection) {
-		class, _ := s.Attr("class")
-		id, _ := s.Attr("id")
-		if noisePattern.MatchString(class) || noisePattern.MatchString(id) {
-			s.Remove()
+	toRemove = toRemove[:0]
+	var collectNoisy func(*html.Node)
+	collectNoisy = func(n *html.Node) {
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.ElementNode {
+				class := getAttr(c, "class")
+				id := getAttr(c, "id")
+				if noisePattern.MatchString(class) || noisePattern.MatchString(id) {
+					toRemove = append(toRemove, c)
+					continue
+				}
+			}
+			collectNoisy(c)
 		}
-	})
+	}
+	collectNoisy(doc)
+	for _, n := range toRemove {
+		removeNode(n)
+	}
 
 	// 4. Kill header elements that do NOT contain an h1
-	doc.Find("header").Each(func(_ int, s *goquery.Selection) {
-		if s.Find("h1").Length() == 0 {
-			s.Remove()
-		}
-	})
-
-	// 5. Kill hidden elements
-	doc.Find("[aria-hidden='true']").Remove()
-	doc.Find("*").Each(func(_ int, s *goquery.Selection) {
-		style, exists := s.Attr("style")
-		if exists {
-			normalized := strings.ReplaceAll(style, " ", "")
-			if strings.Contains(normalized, "display:none") {
-				s.Remove()
+	toRemove = toRemove[:0]
+	var collectHeaders func(*html.Node)
+	collectHeaders = func(n *html.Node) {
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.ElementNode && c.Data == "header" {
+				if findFirst(c, "h1") == nil {
+					toRemove = append(toRemove, c)
+					continue
+				}
 			}
+			collectHeaders(c)
 		}
-	})
+	}
+	collectHeaders(doc)
+	for _, n := range toRemove {
+		removeNode(n)
+	}
+
+	// 5. Kill hidden elements (aria-hidden=true and display:none)
+	toRemove = toRemove[:0]
+	var collectHidden func(*html.Node)
+	collectHidden = func(n *html.Node) {
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.ElementNode {
+				if hasAttr(c, "aria-hidden", "true") {
+					toRemove = append(toRemove, c)
+					continue
+				}
+				style := getAttr(c, "style")
+				if style != "" {
+					normalized := strings.ReplaceAll(style, " ", "")
+					if strings.Contains(normalized, "display:none") {
+						toRemove = append(toRemove, c)
+						continue
+					}
+				}
+			}
+			collectHidden(c)
+		}
+	}
+	collectHidden(doc)
+	for _, n := range toRemove {
+		removeNode(n)
+	}
 
 	// 6. Remove HTML comments
 	var removeComments func(*html.Node)
@@ -74,64 +138,79 @@ func stripNoise(doc *goquery.Document) {
 			}
 		}
 	}
-	removeComments(doc.Get(0))
+	removeComments(doc)
 }
 
-// extractContent picks the main content selection from the document.
-func extractContent(doc *goquery.Document, domain string) *goquery.Selection {
+// extractContent picks the main content node from the document.
+func extractContent(doc *html.Node, domain string) *html.Node {
 	// 1. Site-specific selector
 	if sel, ok := siteSelector(domain); ok {
-		found := doc.Find(sel)
-		if found.Length() > 0 {
-			return found.First()
+		if found := findBySelector(doc, sel); found != nil {
+			return found
 		}
 	}
 
 	// 2. Semantic tags
-	for _, tag := range []string{"main", "article", `[role="main"]`} {
-		found := doc.Find(tag)
-		if found.Length() > 0 {
-			return found.First()
+	for _, tag := range []string{"main", "article"} {
+		if found := findFirst(doc, tag); found != nil {
+			return found
 		}
+	}
+	// Check [role="main"]
+	if found := findByAttr(doc, "role", "main"); found != nil {
+		return found
 	}
 
 	// 3. Readability scoring fallback
-	var bestSel *goquery.Selection
+	var bestNode *html.Node
 	bestScore := -1
-	doc.Find("div, section").Each(func(_ int, s *goquery.Selection) {
-		score := readabilityScore(s)
-		if score > bestScore {
-			bestScore = score
-			bestSel = s
+	var scoreDivs func(*html.Node)
+	scoreDivs = func(n *html.Node) {
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.ElementNode && (c.Data == "div" || c.Data == "section") {
+				score := readabilityScore(c)
+				if score > bestScore {
+					bestScore = score
+					bestNode = c
+				}
+			}
+			scoreDivs(c)
 		}
-	})
-	if bestSel != nil && bestScore > 0 {
-		return bestSel
+	}
+	scoreDivs(doc)
+	if bestNode != nil && bestScore > 0 {
+		return bestNode
 	}
 
 	// 4. Fallback: body
-	return doc.Find("body")
+	if body := findFirst(doc, "body"); body != nil {
+		return body
+	}
+	return doc
 }
 
-// readabilityScore scores a selection based on text length, structural elements, and noise signals.
-func readabilityScore(s *goquery.Selection) int {
-	// Noise check: score = 0 if element matches noise pattern
-	class, _ := s.Attr("class")
-	id, _ := s.Attr("id")
+// readabilityScore scores a node based on text length, structural elements, and noise signals.
+func readabilityScore(n *html.Node) int {
+	class := getAttr(n, "class")
+	id := getAttr(n, "id")
 	if noisePattern.MatchString(class) || noisePattern.MatchString(id) {
 		return 0
 	}
 
-	text := strings.TrimSpace(s.Text())
+	text := strings.TrimSpace(textContent(n))
 	score := len(text)
 
 	// Bonus for structural elements
-	score += s.Find("p").Length() * 50
-	score += s.Find("pre").Length() * 100
+	score += len(findAll(n, "p")) * 50
+	score += len(findAll(n, "pre")) * 100
 
 	// Penalty: link-text-ratio > 0.5
 	if len(text) > 0 {
-		linkText := strings.TrimSpace(s.Find("a").Text())
+		var linkTextBuf strings.Builder
+		for _, a := range findAll(n, "a") {
+			linkTextBuf.WriteString(textContent(a))
+		}
+		linkText := strings.TrimSpace(linkTextBuf.String())
 		ratio := float64(len(linkText)) / float64(len(text))
 		if ratio > 0.5 {
 			score /= 3
@@ -139,4 +218,119 @@ func readabilityScore(s *goquery.Selection) int {
 	}
 
 	return score
+}
+
+// --- Simple CSS selector matching ---
+
+// matchesSelector checks if a node matches a simple CSS selector.
+// Supports: tagname, .classname, #idname, [attr="val"], tag.class, comma-separated.
+func matchesSelector(n *html.Node, sel string) bool {
+	if n.Type != html.ElementNode {
+		return false
+	}
+	// Handle comma-separated selectors
+	if strings.Contains(sel, ",") {
+		parts := strings.Split(sel, ",")
+		for _, part := range parts {
+			if matchesSingleSelector(n, strings.TrimSpace(part)) {
+				return true
+			}
+		}
+		return false
+	}
+	return matchesSingleSelector(n, sel)
+}
+
+func matchesSingleSelector(n *html.Node, sel string) bool {
+	if sel == "" {
+		return false
+	}
+	// [attr="val"]
+	if strings.HasPrefix(sel, "[") && strings.HasSuffix(sel, "]") {
+		inner := sel[1 : len(sel)-1]
+		if eqIdx := strings.Index(inner, "="); eqIdx >= 0 {
+			attrKey := inner[:eqIdx]
+			attrVal := strings.Trim(inner[eqIdx+1:], `"'`)
+			return getAttr(n, attrKey) == attrVal
+		}
+		// Just [attr] — check existence
+		for _, a := range n.Attr {
+			if a.Key == inner {
+				return true
+			}
+		}
+		return false
+	}
+	// #idname
+	if strings.HasPrefix(sel, "#") {
+		return getAttr(n, "id") == sel[1:]
+	}
+	// .classname (possibly tag.classname)
+	if dotIdx := strings.Index(sel, "."); dotIdx >= 0 {
+		tagPart := sel[:dotIdx]
+		classPart := sel[dotIdx+1:]
+		if tagPart != "" && n.Data != tagPart {
+			return false
+		}
+		return hasClass(n, classPart)
+	}
+	// Plain tag name
+	return n.Data == sel
+}
+
+// hasClass checks if the element has the given class (space-separated).
+func hasClass(n *html.Node, className string) bool {
+	class := getAttr(n, "class")
+	for _, cls := range strings.Fields(class) {
+		if cls == className {
+			return true
+		}
+	}
+	return false
+}
+
+// findBySelector finds the first element matching a CSS selector string.
+func findBySelector(n *html.Node, sel string) *html.Node {
+	var result *html.Node
+	var walk func(*html.Node)
+	walk = func(node *html.Node) {
+		if result != nil {
+			return
+		}
+		for c := node.FirstChild; c != nil; c = c.NextSibling {
+			if result != nil {
+				return
+			}
+			if c.Type == html.ElementNode && matchesSelector(c, sel) {
+				result = c
+				return
+			}
+			walk(c)
+		}
+	}
+	walk(n)
+	return result
+}
+
+// findByAttr finds the first element with the given attribute key=value.
+func findByAttr(n *html.Node, key, val string) *html.Node {
+	var result *html.Node
+	var walk func(*html.Node)
+	walk = func(node *html.Node) {
+		if result != nil {
+			return
+		}
+		for c := node.FirstChild; c != nil; c = c.NextSibling {
+			if result != nil {
+				return
+			}
+			if c.Type == html.ElementNode && getAttr(c, key) == val {
+				result = c
+				return
+			}
+			walk(c)
+		}
+	}
+	walk(n)
+	return result
 }

@@ -5,42 +5,50 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/PuerkitoBio/goquery"
 	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
 
-// convertToMarkdown is the main entry point: takes a goquery Selection and returns markdown.
-func convertToMarkdown(sel *goquery.Selection) string {
+// convertToMarkdown is the main entry point: takes an *html.Node and returns markdown.
+func convertToMarkdown(n *html.Node) string {
 	var buf strings.Builder
-	convertNodes(&buf, sel, 0, false)
+	convertNode(&buf, n, 0, false)
 	return cleanMarkdown(buf.String())
 }
 
-// convertNodes recursively walks the node tree, writing markdown to buf.
-func convertNodes(buf *strings.Builder, sel *goquery.Selection, depth int, inBlockquote bool) {
-	sel.Contents().Each(func(i int, s *goquery.Selection) {
-		node := s.Get(0)
-		if node == nil {
-			return
+// convertNode recursively walks the node tree, writing markdown to buf.
+func convertNode(buf *strings.Builder, n *html.Node, depth int, inBlockquote bool) {
+	if n == nil {
+		return
+	}
+	switch n.Type {
+	case html.TextNode:
+		text := collapseWhitespace(n.Data)
+		if text != "" && text != " " || (text == " " && buf.Len() > 0) {
+			buf.WriteString(text)
 		}
-		switch node.Type {
-		case html.TextNode:
-			text := collapseWhitespace(node.Data)
-			if text != "" && text != " " || (text == " " && buf.Len() > 0) {
-				if inBlockquote {
-					buf.WriteString(text)
-				} else {
-					buf.WriteString(text)
-				}
-			}
-		case html.ElementNode:
-			convertElement(buf, s, node.Data, depth, inBlockquote)
+	case html.ElementNode:
+		convertElement(buf, n, depth, inBlockquote)
+	case html.DocumentNode:
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			convertNode(buf, c, depth, inBlockquote)
 		}
-	})
+	}
+}
+
+// convertChildren walks all children of n.
+func convertChildren(buf *strings.Builder, n *html.Node, depth int, inBlockquote bool) {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		convertNode(buf, c, depth, inBlockquote)
+	}
 }
 
 // convertElement handles a single HTML element.
-func convertElement(buf *strings.Builder, s *goquery.Selection, tag string, depth int, inBlockquote bool) {
+func convertElement(buf *strings.Builder, n *html.Node, depth int, inBlockquote bool) {
+	tag := n.DataAtom.String()
+	if tag == "" {
+		tag = n.Data
+	}
 	switch tag {
 	case "h1", "h2", "h3", "h4", "h5", "h6":
 		level := int(tag[1] - '0')
@@ -49,14 +57,14 @@ func convertElement(buf *strings.Builder, s *goquery.Selection, tag string, dept
 		buf.WriteString(prefix)
 		buf.WriteString(" ")
 		var inner strings.Builder
-		convertNodes(&inner, s, depth, inBlockquote)
+		convertChildren(&inner, n, depth, inBlockquote)
 		buf.WriteString(strings.TrimSpace(inner.String()))
 		buf.WriteString("\n\n")
 
 	case "p":
 		buf.WriteString("\n\n")
 		var inner strings.Builder
-		convertNodes(&inner, s, depth, inBlockquote)
+		convertChildren(&inner, n, depth, inBlockquote)
 		text := strings.TrimSpace(inner.String())
 		if inBlockquote {
 			buf.WriteString("> ")
@@ -67,55 +75,55 @@ func convertElement(buf *strings.Builder, s *goquery.Selection, tag string, dept
 		buf.WriteString("\n\n")
 
 	case "pre":
-		// Look for code child
-		code := s.Find("code")
-		if code.Length() > 0 {
+		code := findFirst(n, "code")
+		if code != nil {
 			lang := detectCodeLang(code)
 			buf.WriteString("\n\n")
 			buf.WriteString("```")
 			buf.WriteString(lang)
 			buf.WriteString("\n")
-			buf.WriteString(code.Text())
-			if !strings.HasSuffix(code.Text(), "\n") {
+			text := textContent(code)
+			buf.WriteString(text)
+			if !strings.HasSuffix(text, "\n") {
 				buf.WriteString("\n")
 			}
 			buf.WriteString("```")
 			buf.WriteString("\n\n")
 		} else {
 			buf.WriteString("\n\n```\n")
-			buf.WriteString(s.Text())
+			buf.WriteString(textContent(n))
 			buf.WriteString("\n```\n\n")
 		}
 
 	case "code":
 		// Check if parent is pre (handled there)
-		parent := s.Parent()
-		if parent.Length() > 0 && parent.Get(0).Data == "pre" {
+		if n.Parent != nil && n.Parent.DataAtom == atom.Pre {
 			return
 		}
 		buf.WriteString("`")
-		buf.WriteString(s.Text())
+		buf.WriteString(textContent(n))
 		buf.WriteString("`")
 
 	case "ul", "ol":
 		buf.WriteString("\n")
-		s.Children().Each(func(i int, li *goquery.Selection) {
-			if li.Get(0).Data == "li" {
-				convertLI(buf, li, depth, tag == "ol", i+1)
+		i := 0
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.ElementNode && c.Data == "li" {
+				i++
+				convertLI(buf, c, depth, tag == "ol", i)
 			}
-		})
+		}
 		buf.WriteString("\n")
 
 	case "li":
-		// handled via convertLI when called from ul/ol
-		convertLI(buf, s, depth, false, 1)
+		convertLI(buf, n, depth, false, 1)
 
 	case "a":
-		href, exists := s.Attr("href")
+		href := getAttr(n, "href")
 		var inner strings.Builder
-		convertNodes(&inner, s, depth, inBlockquote)
+		convertChildren(&inner, n, depth, inBlockquote)
 		text := strings.TrimSpace(inner.String())
-		if exists && href != "" {
+		if href != "" {
 			buf.WriteString("[")
 			buf.WriteString(text)
 			buf.WriteString("](")
@@ -126,33 +134,31 @@ func convertElement(buf *strings.Builder, s *goquery.Selection, tag string, dept
 		}
 
 	case "img":
-		alt, _ := s.Attr("alt")
-		src, _ := s.Attr("src")
+		alt := getAttr(n, "alt")
+		src := getAttr(n, "src")
 		buf.WriteString(fmt.Sprintf("![%s](%s)", alt, src))
 
 	case "strong", "b":
 		var inner strings.Builder
-		convertNodes(&inner, s, depth, inBlockquote)
-		text := inner.String()
+		convertChildren(&inner, n, depth, inBlockquote)
 		buf.WriteString("**")
-		buf.WriteString(text)
+		buf.WriteString(inner.String())
 		buf.WriteString("**")
 
 	case "em", "i":
 		var inner strings.Builder
-		convertNodes(&inner, s, depth, inBlockquote)
-		text := inner.String()
+		convertChildren(&inner, n, depth, inBlockquote)
 		buf.WriteString("*")
-		buf.WriteString(text)
+		buf.WriteString(inner.String())
 		buf.WriteString("*")
 
 	case "table":
-		convertTable(buf, s)
+		convertTable(buf, n)
 
 	case "blockquote":
 		buf.WriteString("\n\n")
 		var inner strings.Builder
-		convertNodes(&inner, s, depth, true)
+		convertChildren(&inner, n, depth, true)
 		innerText := strings.TrimSpace(inner.String())
 		lines := strings.Split(innerText, "\n")
 		for _, line := range lines {
@@ -173,71 +179,64 @@ func convertElement(buf *strings.Builder, s *goquery.Selection, tag string, dept
 		buf.WriteString("\n")
 
 	case "dl":
-		convertDefList(buf, s)
+		convertDefList(buf, n)
 
 	case "dt":
 		var inner strings.Builder
-		convertNodes(&inner, s, depth, inBlockquote)
+		convertChildren(&inner, n, depth, inBlockquote)
 		buf.WriteString("\n**")
 		buf.WriteString(strings.TrimSpace(inner.String()))
 		buf.WriteString("**\n")
 
 	case "dd":
 		var inner strings.Builder
-		convertNodes(&inner, s, depth, inBlockquote)
+		convertChildren(&inner, n, depth, inBlockquote)
 		buf.WriteString(strings.TrimSpace(inner.String()))
 		buf.WriteString("\n")
 
 	case "div", "section", "article", "main", "span", "figure", "figcaption":
-		convertNodes(buf, s, depth, inBlockquote)
+		convertChildren(buf, n, depth, inBlockquote)
 
 	case "thead", "tbody", "tfoot":
-		// handled by convertTable
-		convertNodes(buf, s, depth, inBlockquote)
+		convertChildren(buf, n, depth, inBlockquote)
 
 	case "tr", "th", "td":
-		// handled by convertTable
-		convertNodes(buf, s, depth, inBlockquote)
+		convertChildren(buf, n, depth, inBlockquote)
 
 	case "html", "head", "body":
-		convertNodes(buf, s, depth, inBlockquote)
+		convertChildren(buf, n, depth, inBlockquote)
 
 	case "script", "style", "noscript":
 		// skip
 
 	default:
-		// For unknown elements, recurse into children
-		convertNodes(buf, s, depth, inBlockquote)
+		convertChildren(buf, n, depth, inBlockquote)
 	}
 }
 
 // convertLI handles a list item (li), supporting nested lists.
-func convertLI(buf *strings.Builder, li *goquery.Selection, depth int, ordered bool, index int) {
+func convertLI(buf *strings.Builder, li *html.Node, depth int, ordered bool, index int) {
 	indent := strings.Repeat("  ", depth)
 
 	// Collect text content (excluding nested lists)
 	var textBuf strings.Builder
-	li.Contents().Each(func(i int, child *goquery.Selection) {
-		node := child.Get(0)
-		if node == nil {
-			return
-		}
-		if node.Type == html.TextNode {
-			text := collapseWhitespace(node.Data)
+	for c := li.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.TextNode {
+			text := collapseWhitespace(c.Data)
 			if text != "" {
 				textBuf.WriteString(text)
 			}
-		} else if node.Type == html.ElementNode {
-			switch node.Data {
+		} else if c.Type == html.ElementNode {
+			switch c.Data {
 			case "ul", "ol":
 				// handled below
 			default:
 				var inner strings.Builder
-				convertElement(&inner, child, node.Data, depth+1, false)
+				convertElement(&inner, c, depth+1, false)
 				textBuf.WriteString(inner.String())
 			}
 		}
-	})
+	}
 
 	text := strings.TrimSpace(textBuf.String())
 
@@ -248,73 +247,95 @@ func convertLI(buf *strings.Builder, li *goquery.Selection, depth int, ordered b
 	}
 
 	// Now handle nested lists
-	li.Children().Each(func(i int, child *goquery.Selection) {
-		node := child.Get(0)
-		if node == nil || node.Type != html.ElementNode {
-			return
+	for c := li.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type != html.ElementNode {
+			continue
 		}
-		tag := node.Data
+		tag := c.Data
 		if tag == "ul" || tag == "ol" {
-			child.Children().Each(func(j int, nestedLI *goquery.Selection) {
-				if nestedLI.Get(0).Data == "li" {
-					convertLI(buf, nestedLI, depth+1, tag == "ol", j+1)
+			j := 0
+			for nested := c.FirstChild; nested != nil; nested = nested.NextSibling {
+				if nested.Type == html.ElementNode && nested.Data == "li" {
+					j++
+					convertLI(buf, nested, depth+1, tag == "ol", j)
 				}
-			})
+			}
 		}
-	})
+	}
 }
 
-// convertTable renders a goquery table selection as a pipe table.
-func convertTable(buf *strings.Builder, table *goquery.Selection) {
+// convertTable renders a table node as a pipe table.
+func convertTable(buf *strings.Builder, table *html.Node) {
 	buf.WriteString("\n\n")
 
-	// Collect all rows
 	var headers []string
 	var rows [][]string
 
 	// thead rows
-	table.Find("thead tr").Each(func(i int, row *goquery.Selection) {
-		var cols []string
-		row.Find("th, td").Each(func(j int, cell *goquery.Selection) {
-			cols = append(cols, strings.TrimSpace(cell.Text()))
-		})
-		if i == 0 {
-			headers = cols
+	thead := findFirst(table, "thead")
+	if thead != nil {
+		trNodes := findAll(thead, "tr")
+		for i, tr := range trNodes {
+			var cols []string
+			for c := tr.FirstChild; c != nil; c = c.NextSibling {
+				if c.Type == html.ElementNode && (c.Data == "th" || c.Data == "td") {
+					cols = append(cols, strings.TrimSpace(textContent(c)))
+				}
+			}
+			if i == 0 {
+				headers = cols
+			}
 		}
-	})
+	}
 
 	// If no thead, use first tr's th/td as headers
 	if len(headers) == 0 {
-		table.Find("tr").First().Each(func(i int, row *goquery.Selection) {
-			row.Find("th, td").Each(func(j int, cell *goquery.Selection) {
-				headers = append(headers, strings.TrimSpace(cell.Text()))
-			})
-		})
+		firstTR := findFirst(table, "tr")
+		if firstTR != nil {
+			for c := firstTR.FirstChild; c != nil; c = c.NextSibling {
+				if c.Type == html.ElementNode && (c.Data == "th" || c.Data == "td") {
+					headers = append(headers, strings.TrimSpace(textContent(c)))
+				}
+			}
+		}
 	}
 
 	// tbody rows
-	table.Find("tbody tr").Each(func(i int, row *goquery.Selection) {
-		var cols []string
-		row.Find("td, th").Each(func(j int, cell *goquery.Selection) {
-			cols = append(cols, strings.TrimSpace(cell.Text()))
-		})
-		rows = append(rows, cols)
-	})
+	tbody := findFirst(table, "tbody")
+	if tbody != nil {
+		trNodes := findAll(tbody, "tr")
+		for _, tr := range trNodes {
+			var cols []string
+			for c := tr.FirstChild; c != nil; c = c.NextSibling {
+				if c.Type == html.ElementNode && (c.Data == "td" || c.Data == "th") {
+					cols = append(cols, strings.TrimSpace(textContent(c)))
+				}
+			}
+			rows = append(rows, cols)
+		}
+	}
 
 	// If no tbody, use all rows except first as data rows
 	if len(rows) == 0 {
 		first := true
-		table.Find("tr").Each(func(i int, row *goquery.Selection) {
+		allTRs := findAll(table, "tr")
+		for _, tr := range allTRs {
+			// Skip trs inside thead
+			if tr.Parent != nil && tr.Parent.Data == "thead" {
+				continue
+			}
 			if first {
 				first = false
-				return
+				continue
 			}
 			var cols []string
-			row.Find("td, th").Each(func(j int, cell *goquery.Selection) {
-				cols = append(cols, strings.TrimSpace(cell.Text()))
-			})
+			for c := tr.FirstChild; c != nil; c = c.NextSibling {
+				if c.Type == html.ElementNode && (c.Data == "td" || c.Data == "th") {
+					cols = append(cols, strings.TrimSpace(textContent(c)))
+				}
+			}
 			rows = append(rows, cols)
-		})
+		}
 	}
 
 	if len(headers) == 0 {
@@ -346,30 +367,29 @@ func convertTable(buf *strings.Builder, table *goquery.Selection) {
 }
 
 // convertDefList renders a dl element.
-func convertDefList(buf *strings.Builder, dl *goquery.Selection) {
+func convertDefList(buf *strings.Builder, dl *html.Node) {
 	buf.WriteString("\n\n")
-	dl.Children().Each(func(i int, child *goquery.Selection) {
-		node := child.Get(0)
-		if node == nil {
-			return
+	for c := dl.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type != html.ElementNode {
+			continue
 		}
-		switch node.Data {
+		switch c.Data {
 		case "dt":
 			buf.WriteString("\n**")
-			buf.WriteString(strings.TrimSpace(child.Text()))
+			buf.WriteString(strings.TrimSpace(textContent(c)))
 			buf.WriteString("**\n")
 		case "dd":
-			buf.WriteString(strings.TrimSpace(child.Text()))
+			buf.WriteString(strings.TrimSpace(textContent(c)))
 			buf.WriteString("\n")
 		}
-	})
+	}
 	buf.WriteString("\n")
 }
 
 // detectCodeLang extracts the language from a class like "language-go".
-func detectCodeLang(code *goquery.Selection) string {
-	class, exists := code.Attr("class")
-	if !exists {
+func detectCodeLang(n *html.Node) string {
+	class := getAttr(n, "class")
+	if class == "" {
 		return ""
 	}
 	for _, cls := range strings.Fields(class) {
@@ -378,6 +398,70 @@ func detectCodeLang(code *goquery.Selection) string {
 		}
 	}
 	return ""
+}
+
+// --- Helpers for *html.Node tree walking ---
+
+// getAttr returns the value of the named attribute, or empty string.
+func getAttr(n *html.Node, key string) string {
+	for _, a := range n.Attr {
+		if a.Key == key {
+			return a.Val
+		}
+	}
+	return ""
+}
+
+// hasAttr checks if the node has an attribute with the given key and value.
+func hasAttr(n *html.Node, key, val string) bool {
+	return getAttr(n, key) == val
+}
+
+// textContent collects all text nodes recursively.
+func textContent(n *html.Node) string {
+	if n == nil {
+		return ""
+	}
+	if n.Type == html.TextNode {
+		return n.Data
+	}
+	var buf strings.Builder
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		buf.WriteString(textContent(c))
+	}
+	return buf.String()
+}
+
+// findFirst finds the first descendant element with the given tag name.
+func findFirst(n *html.Node, tag string) *html.Node {
+	if n == nil {
+		return nil
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode && c.Data == tag {
+			return c
+		}
+		if found := findFirst(c, tag); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+// findAll finds all descendant elements with the given tag name.
+func findAll(n *html.Node, tag string) []*html.Node {
+	var result []*html.Node
+	var walk func(*html.Node)
+	walk = func(node *html.Node) {
+		for c := node.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.ElementNode && c.Data == tag {
+				result = append(result, c)
+			}
+			walk(c)
+		}
+	}
+	walk(n)
+	return result
 }
 
 var wsRegexp = regexp.MustCompile(`[ \t]+`)

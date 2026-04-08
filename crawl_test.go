@@ -84,7 +84,7 @@ func TestDedup(t *testing.T) {
 }
 
 func TestExtractLinks(t *testing.T) {
-	html := `<html><body>
+	h := `<html><body>
 		<a href="/page1">Page 1</a>
 		<a href="https://example.com/page2">Page 2</a>
 		<a href="https://other.com/nope">Other site</a>
@@ -93,7 +93,7 @@ func TestExtractLinks(t *testing.T) {
 	</body></html>`
 
 	base, _ := url.Parse("https://example.com/start")
-	doc := docFromHTML(html)
+	doc := parseHTML(h)
 
 	links := extractLinks(doc, base)
 
