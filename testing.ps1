@@ -21,7 +21,7 @@ Write-Host "Building rawdoc..." -ForegroundColor Cyan
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $scriptDir
 
-$buildOutput = & go build -tags all -ldflags="-s -w" -o rawdoc.exe . 2>&1
+$buildOutput = & go build -ldflags="-s -w" -o rawdoc.exe . 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Build failed:" -ForegroundColor Red
     Write-Host $buildOutput
@@ -367,7 +367,6 @@ Section "FLAG COMBINATIONS"
 Run-Test "flags/code-only+baeldung"   "$OUT_DIR\edge\baeldung-code-only.md" @($RAWDOC, "https://www.baeldung.com/spring-kafka", "--code-only", "-v")
 Run-Test "flags/json+baeldung"        "$OUT_DIR\edge\baeldung-json.json"    @($RAWDOC, "https://www.baeldung.com/spring-kafka", "-f", "json", "-v")
 Run-Test "flags/no-links+mdn"         "$OUT_DIR\edge\mdn-no-links.md"       @($RAWDOC, "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status", "--no-links", "-v")
-Run-Test "flags/no-tls-spoof+baeldung" "$OUT_DIR\edge\baeldung-no-spoof.md"  @($RAWDOC, "https://www.baeldung.com/spring-kafka", "--no-tls-spoof", "-v")
 Run-Test "flags/no-headless+react"    "$OUT_DIR\edge\react-no-headless.md"  @($RAWDOC, "https://react.dev/learn", "--no-headless", "-v")
 Run-Test "flags/timeout-short"        "$OUT_DIR\edge\timeout-short.md"      @($RAWDOC, "https://kubernetes.io/docs/concepts/workloads/pods/", "--timeout", "2s", "-v")
 Run-Test "flags/custom-header"        "$OUT_DIR\edge\custom-header.md"      @($RAWDOC, "https://kubernetes.io/docs/concepts/workloads/pods/", "-header", "X-Test=rawdoc", "-v")

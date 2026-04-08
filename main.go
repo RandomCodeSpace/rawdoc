@@ -36,7 +36,6 @@ type config struct {
 	maxTime    time.Duration
 	maxRetries int
 	headers    headerFlags
-	noTLSSpoof bool
 	noHeadless bool
 
 	// Info
@@ -78,7 +77,6 @@ func main() {
 	flag.DurationVar(&cfg.maxTime, "max-time", 10*time.Minute, "Total runtime ceiling")
 	flag.IntVar(&cfg.maxRetries, "max-retries", 3, "Per-URL retries")
 	flag.Var(&cfg.headers, "header", "Extra header K=V (repeatable)")
-	flag.BoolVar(&cfg.noTLSSpoof, "no-tls-spoof", false, "Disable utls fingerprint mimicry")
 	flag.BoolVar(&cfg.noHeadless, "no-headless", false, "Disable Chrome fallback tier")
 
 	flag.BoolVar(&cfg.verbose, "v", false, "Log fetch/tier decisions to stderr")
@@ -167,7 +165,7 @@ func reorderArgs() {
 func isBoolFlag(name string) bool {
 	boolFlags := map[string]bool{
 		"code-only": true, "no-links": true, "sitemap": true,
-		"no-tls-spoof": true, "no-headless": true,
+		"no-headless": true,
 		"v": true, "verbose": true, "q": true, "quiet": true,
 		"version": true,
 	}
@@ -187,7 +185,6 @@ func runSingle(cfg *config, u *url.URL) error {
 		maxRetries: cfg.maxRetries,
 		verbose:    cfg.verbose,
 		quiet:      cfg.quiet,
-		noTLSSpoof: cfg.noTLSSpoof,
 		noHeadless: cfg.noHeadless,
 		headers:    []string(cfg.headers),
 	}
@@ -217,7 +214,7 @@ func runSingle(cfg *config, u *url.URL) error {
 			fmt.Fprintf(stderr, "[tier%d] %s → thin content (%dB), trying headless Chrome\n",
 				result.tier, u.String(), len(markdown))
 		}
-		chromeResult, chromeErr := fetchTier3(u.String(), opts)
+		chromeResult, chromeErr := fetchTier2(u.String(), opts)
 		if chromeErr == nil {
 			result = chromeResult
 			doc, _ = goquery.NewDocumentFromReader(strings.NewReader(result.html))
@@ -227,7 +224,7 @@ func runSingle(cfg *config, u *url.URL) error {
 			markdown = convertToMarkdown(content)
 			markdown = optimizeMarkdown(markdown)
 		} else if cfg.verbose {
-			fmt.Fprintf(stderr, "[tier3] %s → %v\n", u.String(), chromeErr)
+			fmt.Fprintf(stderr, "[tier2] %s → %v\n", u.String(), chromeErr)
 		}
 	}
 

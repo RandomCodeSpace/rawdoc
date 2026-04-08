@@ -14,7 +14,6 @@ type fetchOptions struct {
 	maxRetries int
 	verbose    bool
 	quiet      bool
-	noTLSSpoof bool
 	noHeadless bool
 	headers    []string
 }
@@ -60,17 +59,9 @@ func fetch(rawURL string, opts *fetchOptions) (*fetchResult, error) {
 		return result, nil
 	}
 
-	if isEscalatable(err) && !opts.noTLSSpoof {
-		logVerbose(opts, "[tier1] %s → %v, escalating to tier2", rawURL, err)
-		result, err = fetchTier2(rawURL, opts)
-		if err == nil {
-			return result, nil
-		}
-	}
-
 	if isEscalatable(err) && !opts.noHeadless {
-		logVerbose(opts, "[tier2] %s → %v, escalating to tier3", rawURL, err)
-		result, err = fetchTier3(rawURL, opts)
+		logVerbose(opts, "[tier1] %s → %v, escalating to tier2 (Chrome)", rawURL, err)
+		result, err = fetchTier2(rawURL, opts)
 		if err == nil {
 			return result, nil
 		}

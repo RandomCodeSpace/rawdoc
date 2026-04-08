@@ -1,5 +1,3 @@
-//go:build tier3 || all
-
 package main
 
 import (
@@ -13,53 +11,53 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 )
 
-func fetchTier3(rawURL string, opts *fetchOptions) (*fetchResult, error) {
+func fetchTier2(rawURL string, opts *fetchOptions) (*fetchResult, error) {
 	chromePath := findChrome()
 	if chromePath == "" {
-		logVerbose(opts, "[tier3] Chrome not found at any known path")
+		logVerbose(opts, "[tier2] Chrome not found at any known path")
 		return nil, &httpError{statusCode: 0, message: "Chrome not installed"}
 	}
 
-	logVerbose(opts, "[tier3] %s → using Chrome at %s", rawURL, chromePath)
+	logVerbose(opts, "[tier2] %s → using Chrome at %s", rawURL, chromePath)
 
 	l := launcher.New().Bin(chromePath).Headless(true)
 	controlURL, err := l.Launch()
 	if err != nil {
-		logVerbose(opts, "[tier3] %s → Chrome launch failed: %v", rawURL, err)
+		logVerbose(opts, "[tier2] %s → Chrome launch failed: %v", rawURL, err)
 		return nil, fmt.Errorf("chrome launch: %w", err)
 	}
 
 	browser := rod.New().ControlURL(controlURL)
 	if err := browser.Connect(); err != nil {
-		logVerbose(opts, "[tier3] %s → browser connect failed: %v", rawURL, err)
+		logVerbose(opts, "[tier2] %s → browser connect failed: %v", rawURL, err)
 		return nil, fmt.Errorf("browser connect: %w", err)
 	}
 	defer browser.Close()
 
 	page, err := browser.Page(proto.TargetCreateTarget{URL: rawURL})
 	if err != nil {
-		logVerbose(opts, "[tier3] %s → page open failed: %v", rawURL, err)
+		logVerbose(opts, "[tier2] %s → page open failed: %v", rawURL, err)
 		return nil, fmt.Errorf("browser open page: %w", err)
 	}
 
 	if err := page.WaitStable(1 * time.Second); err != nil {
-		logVerbose(opts, "[tier3] %s → page did not stabilize: %v", rawURL, err)
+		logVerbose(opts, "[tier2] %s → page did not stabilize: %v", rawURL, err)
 	}
 	page.MustWaitLoad()
 
 	html, err := page.HTML()
 	if err != nil {
-		logVerbose(opts, "[tier3] %s → failed to get HTML: %v", rawURL, err)
+		logVerbose(opts, "[tier2] %s → failed to get HTML: %v", rawURL, err)
 		return nil, fmt.Errorf("page html: %w", err)
 	}
 
 	if isCaptchaPage(html) {
-		logVerbose(opts, "[tier3] %s → CAPTCHA detected", rawURL)
+		logVerbose(opts, "[tier2] %s → CAPTCHA detected", rawURL)
 		return nil, &httpError{statusCode: 0, message: "site requires interactive challenge (CAPTCHA)"}
 	}
 
-	logVerbose(opts, "[tier3] %s → 200 (headless Chrome, %d bytes)", rawURL, len(html))
-	return &fetchResult{html: html, tier: 3, url: rawURL}, nil
+	logVerbose(opts, "[tier2] %s → 200 (headless Chrome, %d bytes)", rawURL, len(html))
+	return &fetchResult{html: html, tier: 2, url: rawURL}, nil
 }
 
 func findChrome() string {

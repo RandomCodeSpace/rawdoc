@@ -28,7 +28,7 @@ NC='\033[0m'
 
 echo -e "${CYAN}Building rawdoc...${NC}"
 cd "$(dirname "$0")" || exit 1
-if ! go build -tags all -ldflags="-s -w" -o rawdoc . 2>&1; then
+if ! go build -ldflags="-s -w" -o rawdoc . 2>&1; then
     echo -e "${RED}Build failed${NC}"
     exit 1
 fi
@@ -510,10 +510,6 @@ run_test "flags/json+baeldung" \
 run_test "flags/no-links+mdn" \
     "$OUT_DIR/edge/mdn-no-links.md" \
     $RAWDOC https://developer.mozilla.org/en-US/docs/Web/HTTP/Status --no-links -v
-
-run_test "flags/no-tls-spoof+baeldung" \
-    "$OUT_DIR/edge/baeldung-no-spoof.md" \
-    $RAWDOC https://www.baeldung.com/spring-kafka --no-tls-spoof -v
 
 run_test "flags/no-headless+react" \
     "$OUT_DIR/edge/react-no-headless.md" \

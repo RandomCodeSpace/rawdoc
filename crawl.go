@@ -187,7 +187,6 @@ func runCrawl(cfg *config, seedURL *url.URL) error {
 		maxRetries: cfg.maxRetries,
 		verbose:    cfg.verbose,
 		quiet:      cfg.quiet,
-		noTLSSpoof: cfg.noTLSSpoof,
 		noHeadless: cfg.noHeadless,
 		headers:    []string(cfg.headers),
 	}

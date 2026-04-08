@@ -57,7 +57,7 @@ jobs:
           grep 'var version' main.go
 
       - name: Run tests
-        run: go test -tags all -race -count=1 ./...
+        run: go test -race -count=1 ./...
 
       - name: Cross-compile binaries
         run: |
@@ -71,7 +71,7 @@ jobs:
               OUTPUT="${OUTPUT}.exe"
             fi
             echo "Building $OUTPUT"
-            GOOS=$GOOS GOARCH=$GOARCH go build -tags all -ldflags="-s -w" -o "$OUTPUT" .
+            GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-s -w" -o "$OUTPUT" .
           done
           ls -lh dist/
 

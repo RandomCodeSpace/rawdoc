@@ -115,7 +115,7 @@ func TestTierEscalationOn403(t *testing.T) {
 	opts := &fetchOptions{
 		timeout:    5 * time.Second,
 		maxRetries: 3,
-		noTLSSpoof: true,
+
 		noHeadless: true,
 	}
 	_, err := fetch(ts.URL, opts)
@@ -133,7 +133,7 @@ func TestTier3SkipsWhenNoChrome(t *testing.T) {
 	opts := &fetchOptions{
 		timeout:    5 * time.Second,
 		maxRetries: 1,
-		noTLSSpoof: true,
+
 		noHeadless: false, // allow tier3, but Chrome likely not found in test env
 	}
 	_, err := fetch(server.URL, opts)

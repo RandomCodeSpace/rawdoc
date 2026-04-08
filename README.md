@@ -11,21 +11,10 @@ Single Go binary. No runtime downloads, no external services, no AI, no search.
 ## Install
 
 ```bash
-# Default — Tier 1 only (plain HTTP, no AV issues)
 go install github.com/RandomCodeSpace/rawdoc@latest
-
-# With all tiers (Tier 1 + TLS spoofing + headless Chrome)
-go install -tags all github.com/RandomCodeSpace/rawdoc@latest
 ```
 
-| Build | Size | Tiers | AV Safe |
-|-------|------|-------|---------|
-| Default | ~7MB | Tier 1 | Yes |
-| `-tags tier2` | ~10MB | Tier 1+2 | May flag |
-| `-tags tier3` | ~10MB | Tier 1+3 | Yes |
-| `-tags all` | ~13MB | All | May flag |
-
-Tier 2 uses TLS fingerprint spoofing (`utls`) which triggers Windows Defender false positives (`Trojan:Win32/Bearfoos.B!ml`). The default build excludes it.
+Single binary, no AV flags, no runtime deps.
 
 ---
 
@@ -58,12 +47,11 @@ rawdoc https://www.baeldung.com/spring-kafka -v
 
 ## How It Works
 
-Three-tier fetch strategy — auto-escalates until a clean response is obtained:
+Two-tier fetch strategy — auto-escalates when needed:
 
 ```
 Tier 1: Plain HTTP (~50ms)     — works for most doc sites
-Tier 2: TLS Spoofing (~100ms)  — bypasses basic Cloudflare
-Tier 3: Headless Chrome (~2s)  — JS-rendered pages (needs Chrome installed)
+Tier 2: Headless Chrome (~2s)  — JS-rendered pages, Cloudflare (needs Chrome installed)
 ```
 
 Processing pipeline: **Fetch → Strip noise → Extract content → Convert to Markdown**
@@ -105,7 +93,6 @@ rawdoc [flags] <url>
 | `--max-time duration` | `10m` | Total runtime ceiling |
 | `--max-retries int` | `3` | Per-URL retries |
 | `--header K=V` | — | Extra header (repeatable) |
-| `--no-tls-spoof` | — | Disable utls fingerprint mimicry |
 | `--no-headless` | — | Disable Chrome fallback tier |
 
 ### Info
@@ -241,22 +228,5 @@ GOOS=darwin GOARCH=arm64 go build -o rawdoc-darwin-arm64 .
 | Requirement | Notes |
 |-------------|-------|
 | Go 1.24+ | Required to build from source |
-| Chrome / Chromium | Optional — only needed for Tier 3 (JS-rendered pages) |
+| Chrome / Chromium | Optional — only needed for Tier 2 (JS-rendered pages, Cloudflare) |
 
-## Windows Antivirus Note
-
-Windows Defender may flag `rawdoc.exe` as a false positive. This happens because:
-
-- Go statically links everything into one large binary (triggers heuristic scanners)
-- `utls` dependency spoofs TLS fingerprints (anti-detection technique)
-- `go-rod` automates headless Chrome (browser automation flagged by behavior analysis)
-
-**The code is fully open source — inspect it yourself.** To work around this:
-
-```powershell
-# Option 1: Exclude the build directory
-Add-MpPreference -ExclusionPath "D:\Development\rawdoc"
-
-# Option 2: Build with stripped symbols (smaller, fewer flags)
-go build -ldflags="-s -w" -o rawdoc.exe .
-```
