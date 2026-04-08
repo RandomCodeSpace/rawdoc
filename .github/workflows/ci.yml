@@ -28,7 +28,7 @@ jobs:
       - name: Run tests
         id: tests
         run: |
-          TEST_OUTPUT=$(go test -v -race -count=1 ./... 2>&1)
+          TEST_OUTPUT=$(go test -tags all -v -race -count=1 ./... 2>&1)
           echo "$TEST_OUTPUT"
           TEST_COUNT=$(echo "$TEST_OUTPUT" | grep -c '^--- PASS:' || true)
           echo "test_count=$TEST_COUNT" >> "$GITHUB_OUTPUT"

@@ -11,10 +11,21 @@ Single Go binary. No runtime downloads, no external services, no AI, no search.
 ## Install
 
 ```bash
+# Default — Tier 1 only (plain HTTP, no AV issues)
 go install github.com/RandomCodeSpace/rawdoc@latest
+
+# With all tiers (Tier 1 + TLS spoofing + headless Chrome)
+go install -tags all github.com/RandomCodeSpace/rawdoc@latest
 ```
 
-That's it — single binary, no runtime deps.
+| Build | Size | Tiers | AV Safe |
+|-------|------|-------|---------|
+| Default | ~7MB | Tier 1 | Yes |
+| `-tags tier2` | ~10MB | Tier 1+2 | May flag |
+| `-tags tier3` | ~10MB | Tier 1+3 | Yes |
+| `-tags all` | ~13MB | All | May flag |
+
+Tier 2 uses TLS fingerprint spoofing (`utls`) which triggers Windows Defender false positives (`Trojan:Win32/Bearfoos.B!ml`). The default build excludes it.
 
 ---
 

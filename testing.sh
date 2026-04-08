@@ -28,7 +28,7 @@ NC='\033[0m'
 
 echo -e "${CYAN}Building rawdoc...${NC}"
 cd "$(dirname "$0")" || exit 1
-if ! go build -ldflags="-s -w" -o rawdoc . 2>&1; then
+if ! go build -tags all -ldflags="-s -w" -o rawdoc . 2>&1; then
     echo -e "${RED}Build failed${NC}"
     exit 1
 fi

@@ -21,7 +21,7 @@ Write-Host "Building rawdoc..." -ForegroundColor Cyan
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $scriptDir
 
-$buildOutput = & go build -ldflags="-s -w" -o rawdoc.exe . 2>&1
+$buildOutput = & go build -tags all -ldflags="-s -w" -o rawdoc.exe . 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Build failed:" -ForegroundColor Red
     Write-Host $buildOutput
