@@ -94,6 +94,10 @@ func main() {
 		flag.PrintDefaults()
 	}
 
+	// Reorder os.Args so flags work regardless of position relative to URL.
+	// Go's flag package stops parsing at the first non-flag argument.
+	reorderArgs()
+
 	flag.Parse()
 
 	if *showVersion {
@@ -132,6 +136,42 @@ func main() {
 		}
 		os.Exit(1)
 	}
+}
+
+// reorderArgs moves the positional URL argument to the end of os.Args
+// so that Go's flag package parses all flags regardless of position.
+func reorderArgs() {
+	var flags []string
+	var positional []string
+	args := os.Args[1:]
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if strings.HasPrefix(arg, "-") {
+			flags = append(flags, arg)
+			// Check if this flag takes a value (next arg doesn't start with -)
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") && !strings.Contains(arg, "=") {
+				// Could be a boolean flag or a value flag — check if it's a known bool flag
+				name := strings.TrimLeft(arg, "-")
+				if !isBoolFlag(name) {
+					i++
+					flags = append(flags, args[i])
+				}
+			}
+		} else {
+			positional = append(positional, arg)
+		}
+	}
+	os.Args = append([]string{os.Args[0]}, append(flags, positional...)...)
+}
+
+func isBoolFlag(name string) bool {
+	boolFlags := map[string]bool{
+		"code-only": true, "no-links": true, "sitemap": true,
+		"no-tls-spoof": true, "no-headless": true,
+		"v": true, "verbose": true, "q": true, "quiet": true,
+		"version": true,
+	}
+	return boolFlags[name]
 }
 
 func run(cfg *config, u *url.URL) error {
