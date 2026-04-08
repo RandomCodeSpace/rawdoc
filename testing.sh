@@ -127,6 +127,17 @@ run_test() {
     fi
     echo ""
 
+    # Preview — show first 2 non-empty content lines (dimmed)
+    if [ -f "$outfile" ] && [ $size -gt 0 ]; then
+        local preview
+        preview=$(grep -v '^\s*$' "$outfile" 2>/dev/null | head -2 | cut -c1-100)
+        if [ -n "$preview" ]; then
+            echo "$preview" | while IFS= read -r line; do
+                printf "   ${DIM}│ %s${NC}\n" "$line"
+            done
+        fi
+    fi
+
     # Log output
     printf "%-2s %-45s %8s %8s exit=%d %s\n" \
         "$status_icon" "$name" "$duration_str" "$size_str" "$exit_code" "$tier_info" >> "$LOG"
