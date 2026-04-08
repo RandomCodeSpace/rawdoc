@@ -1,12 +1,16 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/PuerkitoBio/goquery"
 )
 
 var version = "0.1.0"
@@ -131,7 +135,164 @@ func main() {
 }
 
 func run(cfg *config, u *url.URL) error {
-	// TODO: dispatch to single-page fetch or crawl based on cfg.depth
-	fmt.Fprintf(os.Stderr, "rawdoc: fetching %s\n", u.String())
-	return fmt.Errorf("not implemented")
+	if cfg.depth > 0 {
+		return runCrawl(cfg, u)
+	}
+	return runSingle(cfg, u)
+}
+
+func runSingle(cfg *config, u *url.URL) error {
+	opts := &fetchOptions{
+		timeout:    cfg.timeout,
+		maxRetries: cfg.maxRetries,
+		verbose:    cfg.verbose,
+		quiet:      cfg.quiet,
+		noTLSSpoof: cfg.noTLSSpoof,
+		noHeadless: cfg.noHeadless,
+		headers:    []string(cfg.headers),
+	}
+
+	result, err := fetch(u.String(), opts)
+	if err != nil {
+		return fmt.Errorf("fetch: %w", err)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(result.html))
+	if err != nil {
+		return fmt.Errorf("parse HTML: %w", err)
+	}
+
+	stripNoise(doc)
+
+	content := extractContent(doc, u.Host)
+	markdown := convertToMarkdown(content)
+
+	title := strings.TrimSpace(doc.Find("title").Text())
+	description, _ := doc.Find(`meta[name="description"]`).Attr("content")
+	description = strings.TrimSpace(description)
+
+	return writeOutput(cfg, result.url, title, description, markdown, result)
+}
+
+func writeOutput(cfg *config, pageURL, title, description, markdown string, result *fetchResult) error {
+	var w io.Writer = os.Stdout
+
+	if cfg.output != "" && cfg.depth == 0 {
+		f, err := os.Create(cfg.output)
+		if err != nil {
+			return fmt.Errorf("create output file: %w", err)
+		}
+		defer f.Close()
+		w = f
+	}
+
+	if cfg.codeOnly {
+		return writeCodeOnly(w, markdown)
+	}
+
+	switch cfg.format {
+	case "json":
+		return writeJSON(w, pageURL, title, description, markdown, result)
+	case "text":
+		return writeText(w, markdown)
+	default:
+		return writeMarkdown(w, markdown)
+	}
+}
+
+func writeMarkdown(w io.Writer, markdown string) error {
+	_, err := fmt.Fprintln(w, markdown)
+	return err
+}
+
+func writeText(w io.Writer, markdown string) error {
+	// Strip bold/italic markers (** and *)
+	text := strings.ReplaceAll(markdown, "**", "")
+	text = strings.ReplaceAll(text, "*", "")
+	_, err := fmt.Fprintln(w, text)
+	return err
+}
+
+type codeBlock struct {
+	Lang string `json:"lang"`
+	Code string `json:"code"`
+}
+
+func extractCodeBlocks(markdown string) []codeBlock {
+	var blocks []codeBlock
+	lines := strings.Split(markdown, "\n")
+	var inBlock bool
+	var lang string
+	var buf strings.Builder
+
+	for _, line := range lines {
+		if !inBlock {
+			if strings.HasPrefix(line, "```") {
+				inBlock = true
+				lang = strings.TrimPrefix(line, "```")
+				lang = strings.TrimSpace(lang)
+				buf.Reset()
+			}
+		} else {
+			if strings.HasPrefix(line, "```") {
+				blocks = append(blocks, codeBlock{Lang: lang, Code: buf.String()})
+				inBlock = false
+				lang = ""
+				buf.Reset()
+			} else {
+				buf.WriteString(line)
+				buf.WriteByte('\n')
+			}
+		}
+	}
+	return blocks
+}
+
+func writeJSON(w io.Writer, pageURL, title, description, markdown string, result *fetchResult) error {
+	codeBlocks := extractCodeBlocks(markdown)
+
+	type output struct {
+		URL           string      `json:"url"`
+		Title         string      `json:"title"`
+		Description   string      `json:"description"`
+		Content       string      `json:"content"`
+		CodeBlocks    []codeBlock `json:"code_blocks"`
+		FetchTier     int         `json:"fetch_tier"`
+		FetchedAt     string      `json:"fetched_at"`
+		ContentLength int         `json:"content_length"`
+	}
+
+	out := output{
+		URL:           pageURL,
+		Title:         title,
+		Description:   description,
+		Content:       markdown,
+		CodeBlocks:    codeBlocks,
+		FetchTier:     result.tier,
+		FetchedAt:     time.Now().UTC().Format(time.RFC3339),
+		ContentLength: len(markdown),
+	}
+
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(out)
+}
+
+func writeCodeOnly(w io.Writer, markdown string) error {
+	blocks := extractCodeBlocks(markdown)
+	for i, b := range blocks {
+		if i > 0 {
+			fmt.Fprintln(w)
+		}
+		lang := b.Lang
+		if lang == "" {
+			lang = ""
+		}
+		fmt.Fprintf(w, "```%s\n%s```\n", lang, b.Code)
+	}
+	return nil
+}
+
+func runCrawl(cfg *config, u *url.URL) error {
+	return fmt.Errorf("crawl mode not implemented yet")
 }
