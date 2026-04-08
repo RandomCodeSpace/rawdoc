@@ -229,5 +229,5 @@ GOOS=darwin GOARCH=arm64 go build -o rawdoc-darwin-arm64 .
 
 | Requirement | Notes |
 |-------------|-------|
-| Go 1.21+ | Required to build from source |
+| Go 1.24+ | Required to build from source |
 | Chrome / Chromium | Optional — only needed for Tier 3 (JS-rendered pages) |

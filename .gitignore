@@ -1,1 +1,23 @@
+# Binary
 rawdoc
+rawdoc.exe
+dist/
+
+# IDE
+.cursor/
+.vscode/
+.idea/
+
+# MCP configs
+.mcp.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+xx.md
+/tmp/
+
+# Plans (internal)
+docs/superpowers/

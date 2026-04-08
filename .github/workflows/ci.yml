@@ -23,7 +23,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version: "1.24"
 
       - name: Run tests
         id: tests
@@ -65,7 +65,9 @@ jobs:
             exit 0
           fi
 
-          git tag "$NEW_TAG"
+          git tag -a "$NEW_TAG" -m "Auto patch $NEW_TAG
+
+          Install: go install github.com/RandomCodeSpace/rawdoc@$NEW_TAG"
           git push origin "$NEW_TAG"
           echo "Tagged $NEW_TAG"
           echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"

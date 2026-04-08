@@ -29,7 +29,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version: "1.24"
 
       - name: Determine version
         id: version
@@ -87,7 +87,9 @@ jobs:
           git add main.go
           git diff --cached --quiet && echo "No version change to commit" || \
             git commit -m "release: v${{ steps.version.outputs.version }}"
-          git tag "${{ steps.version.outputs.tag }}"
+          git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.tag }}
+
+          Install: go install github.com/RandomCodeSpace/rawdoc@${{ steps.version.outputs.tag }}"
           git push origin HEAD:main --tags
 
       - name: Create GitHub release
