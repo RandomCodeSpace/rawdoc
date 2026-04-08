@@ -479,61 +479,38 @@ func cleanMarkdown(s string) string {
 	return strings.TrimSpace(s)
 }
 
+// Patterns for output optimization
+var (
+	// [¶](#section-anchor) — pilcrow anchors used by Go docs, MDN, etc.
+	pilcrowPattern = regexp.MustCompile(`\s*\[¶\]\([^)]*\)`)
+	// [text](#fragment) — fragment-only self-links, keep just the text
+	fragmentLinkPattern = regexp.MustCompile(`\[([^\]]+)\]\(#[^)]*\)`)
+	// Lines that are only whitespace
+	whitespaceLinePattern = regexp.MustCompile(`(?m)^[ \t]+$`)
+	// 3+ consecutive blank lines → 2
+	excessiveBlanks = regexp.MustCompile(`\n{3,}`)
+	// Trailing whitespace on lines
+	trailingWhitespace = regexp.MustCompile(`(?m)[ \t]+$`)
+)
+
 // optimizeMarkdown post-processes markdown to minimize token usage for AI agents.
-// Single-pass line scanner — no regex.
 func optimizeMarkdown(s string) string {
-	var buf strings.Builder
-	buf.Grow(len(s))
-	blankCount := 0
+	// Strip pilcrow anchors: [¶](#...)
+	s = pilcrowPattern.ReplaceAllString(s, "")
 
-	for _, line := range strings.Split(s, "\n") {
-		// Strip trailing whitespace
-		line = strings.TrimRight(line, " \t")
+	// Convert fragment-only links to plain text: [text](#frag) → text
+	s = fragmentLinkPattern.ReplaceAllString(s, "$1")
 
-		// Strip pilcrow anchors: [¶](#...)
-		if idx := strings.Index(line, "[¶]"); idx >= 0 {
-			if end := strings.Index(line[idx:], ")"); end >= 0 {
-				line = strings.TrimRight(line[:idx], " ") + line[idx+end+1:]
-			}
-		}
+	// Strip trailing whitespace from lines
+	s = trailingWhitespace.ReplaceAllString(s, "")
 
-		// Convert fragment-only links: [text](#frag) → text
-		line = stripFragmentLinks(line)
+	// Collapse whitespace-only lines to empty lines
+	s = whitespaceLinePattern.ReplaceAllString(s, "")
 
-		// Collapse blank lines (max 2 consecutive)
-		if line == "" {
-			blankCount++
-			if blankCount <= 2 {
-				buf.WriteByte('\n')
-			}
-			continue
-		}
-		blankCount = 0
-		buf.WriteString(line)
-		buf.WriteByte('\n')
-	}
+	// Collapse 3+ blank lines to 2
+	s = excessiveBlanks.ReplaceAllString(s, "\n\n")
 
-	return strings.TrimSpace(buf.String())
-}
-
-// stripFragmentLinks converts [text](#fragment) → text in a line.
-func stripFragmentLinks(line string) string {
-	for {
-		start := strings.Index(line, "](#")
-		if start < 0 {
-			return line
-		}
-		open := strings.LastIndex(line[:start], "[")
-		if open < 0 {
-			return line
-		}
-		close := strings.Index(line[start:], ")")
-		if close < 0 {
-			return line
-		}
-		close += start
-		line = line[:open] + line[open+1:start] + line[close+1:]
-	}
+	return strings.TrimSpace(s)
 }
 
 // estimateTokens gives a rough token count using the ~4 chars/token heuristic

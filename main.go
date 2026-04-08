@@ -232,6 +232,9 @@ func runSingle(cfg *config, u *url.URL) error {
 		}
 		fmt.Fprintf(stderr, "[stats] input: %s (%d tokens) → output: %s (%d tokens) | %d%% saved\n",
 			humanSize(rawHTMLSize), rawTokens, humanSize(outputSize), outTokens, savings)
+		// Machine-parseable stats line for test scripts
+		fmt.Fprintf(stderr, "[data] raw_bytes=%d out_bytes=%d raw_tokens=%d out_tokens=%d saved_pct=%d\n",
+			rawHTMLSize, outputSize, rawTokens, outTokens, savings)
 		if cfg.output != "" {
 			fmt.Fprintf(stderr, "[output] wrote %s to %s\n", cfg.format, cfg.output)
 		}

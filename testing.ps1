@@ -97,7 +97,6 @@ function Run-Test {
     if (Test-Path $OutFile) { $size = (Get-Item $OutFile).Length }
 
     $durationStr = Format-Duration $durationMs
-    $sizeStr     = Format-Size $size
 
     # Status
     if ($exitCode -eq 0 -and $size -gt 100) {
@@ -114,36 +113,38 @@ function Run-Test {
         $script:FAIL++
     }
 
-    # Extract token stats from stderr  ([stats] line)
-    $tokensStr = ""
+    # Parse [data] line from stderr for machine-readable stats
+    $rawBytes = 0; $outBytes = 0; $rawTokens = 0; $outTokens = 0; $savedPct = 0
     if ((Test-Path $stderrFile) -and (Get-Item $stderrFile).Length -gt 0) {
-        $stderrLines = Get-Content $stderrFile
-        $statsLine   = $stderrLines | Where-Object { (Strip-Ansi $_) -match '\[stats\]' } | Select-Object -First 1
-        if ($statsLine) {
-            $clean = Strip-Ansi $statsLine
-            if ($clean -match '\((\d+)\s+tokens\)' -and $clean -match '(\d+)%\s+saved') {
-                $tokensStr = "$($Matches[1])→↓$($Matches[1])%"
-                # Re-match for pct separately
-                if ($clean -match '\((\d+)\s+tokens\)') { $inTok = $Matches[1] }
-                if ($clean -match '(\d+)%\s+saved')     { $pct   = $Matches[1] }
-                $tokensStr = "${inTok}→↓${pct}%"
-            }
+        $dataLine = Get-Content $stderrFile | Where-Object { $_ -match '\[data\]' } | Select-Object -First 1
+        if ($dataLine) {
+            if ($dataLine -match 'raw_bytes=(\d+)')  { $rawBytes  = [int]$Matches[1] }
+            if ($dataLine -match 'out_bytes=(\d+)')  { $outBytes  = [int]$Matches[1] }
+            if ($dataLine -match 'raw_tokens=(\d+)') { $rawTokens = [int]$Matches[1] }
+            if ($dataLine -match 'out_tokens=(\d+)') { $outTokens = [int]$Matches[1] }
+            if ($dataLine -match 'saved_pct=(\d+)')  { $savedPct  = [int]$Matches[1] }
         }
     }
 
-    # Preview — first non-empty line, max 30 chars
+    $rawStr    = Format-Size $rawBytes
+    $outStr    = Format-Size $outBytes
+    $tokenStr  = "${rawTokens}→${outTokens}"
+    $savedStr  = [char]0x2193 + "${savedPct}%"
+
+    # Preview — first non-empty line, max 25 chars
     $preview = ""
     if ((Test-Path $OutFile) -and $size -gt 0) {
         $preview = (Get-Content $OutFile | Where-Object { $_ -match '\S' } | Select-Object -First 1)
-        if ($preview.Length -gt 30) { $preview = $preview.Substring(0, 30) }
+        if ($preview.Length -gt 25) { $preview = $preview.Substring(0, 25) }
     }
 
-    # Console — tabular single line
-    Write-Host ("{0}  {1,-35} {2,7} {3,8}  {4,-18}  {5,-30}" -f `
-        $icon, $Name, $durationStr, $sizeStr, $tokensStr, $preview) -ForegroundColor $color
+    # Console — tabular
+    Write-Host ("{0}  {1,-28} {2,6}  {3,8} {4,8}  {5,14} {6,5}  {7,-25}" -f `
+        $icon, $Name, $durationStr, $rawStr, $outStr, $tokenStr, $savedStr, $preview) -ForegroundColor $color
 
     # Log
-    "{0,-2} {1,-45} {2,8} {3,8} exit={4}" -f $icon, $Name, $durationStr, $sizeStr, $exitCode |
+    "{0,-2} {1,-28} {2,6}  {3,8} {4,8}  {5,14} {6,5}  {7}" -f `
+        $icon, $Name, $durationStr, $rawStr, $outStr, $tokenStr, $savedStr, $preview |
         Out-File $LOG -Append -Encoding utf8
 
     # Save stderr alongside output
@@ -262,9 +263,17 @@ function Run-Crawl-Test {
     Remove-Item $stderrFile -ErrorAction SilentlyContinue
 }
 
+function Print-TableHeader {
+    Write-Host ("{0,-2}  {1,-28} {2,6}  {3,8} {4,8}  {5,14} {6,5}  {7,-25}" -f `
+        "", "NAME", "TIME", "RAW", "OUTPUT", "TOKENS", "SAVED", "PREVIEW") -ForegroundColor White
+    Write-Host ("{0,-2}  {1,-28} {2,6}  {3,8} {4,8}  {5,14} {6,5}  {7,-25}" -f `
+        "", "----", "----", "---", "------", "------", "-----", "-------") -ForegroundColor DarkGray
+}
+
 function Section([string]$title) {
     Write-Host ""
-    Write-Host "── $title ──" -ForegroundColor Cyan
+    Write-Host "$([char]0x2500)$([char]0x2500) $title $([char]0x2500)$([char]0x2500)" -ForegroundColor Cyan
+    Print-TableHeader
     ""            | Out-File $LOG -Append -Encoding utf8
     "── $title ──" | Out-File $LOG -Append -Encoding utf8
 }
@@ -310,12 +319,12 @@ Section "OUTPUT FORMATS — same URL, different formats"
 
 $TEST_URL = "https://kubernetes.io/docs/concepts/workloads/pods/"
 
-Run-Test "format/markdown"  "$OUT_DIR\formats\markdown.md"    @($RAWDOC, $TEST_URL, "-f", "markdown")
-Run-Test "format/text"      "$OUT_DIR\formats\text.txt"       @($RAWDOC, $TEST_URL, "-f", "text")
-Run-Test "format/json"      "$OUT_DIR\formats\json.json"      @($RAWDOC, $TEST_URL, "-f", "json")
-Run-Test "format/yaml"      "$OUT_DIR\formats\yaml.yaml"      @($RAWDOC, $TEST_URL, "-f", "yaml")
-Run-Test "format/code-only" "$OUT_DIR\formats\code-only.md"   @($RAWDOC, $TEST_URL, "--code-only")
-Run-Test "format/no-links"  "$OUT_DIR\formats\no-links.md"    @($RAWDOC, $TEST_URL, "--no-links")
+Run-Test "format/markdown"  "$OUT_DIR\formats\markdown.md"    @($RAWDOC, $TEST_URL, "-f", "markdown", "-v")
+Run-Test "format/text"      "$OUT_DIR\formats\text.txt"       @($RAWDOC, $TEST_URL, "-f", "text", "-v")
+Run-Test "format/json"      "$OUT_DIR\formats\json.json"      @($RAWDOC, $TEST_URL, "-f", "json", "-v")
+Run-Test "format/yaml"      "$OUT_DIR\formats\yaml.yaml"      @($RAWDOC, $TEST_URL, "-f", "yaml", "-v")
+Run-Test "format/code-only" "$OUT_DIR\formats\code-only.md"   @($RAWDOC, $TEST_URL, "--code-only", "-v")
+Run-Test "format/no-links"  "$OUT_DIR\formats\no-links.md"    @($RAWDOC, $TEST_URL, "--no-links", "-v")
 
 # ── Crawl Mode ────────────────────────────────────────────────────────────────
 

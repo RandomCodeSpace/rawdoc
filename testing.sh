@@ -55,6 +55,26 @@ echo "rawdoc test results — $(date '+%Y-%m-%d %H:%M:%S')" > "$LOG"
 echo "=================================================" >> "$LOG"
 echo "" >> "$LOG"
 
+# ─── Helpers ─────────────────────────────────────────────────────────────────
+
+format_size() {
+    local bytes=$1
+    if [ "$bytes" -ge 1048576 ]; then
+        echo "$(echo "scale=1; $bytes/1048576" | bc)MB"
+    elif [ "$bytes" -ge 1024 ]; then
+        echo "$(echo "scale=1; $bytes/1024" | bc)KB"
+    else
+        echo "${bytes}B"
+    fi
+}
+
+print_table_header() {
+    printf "${BOLD}%-2s  %-28s %6s  %8s %8s  %14s %5s  %-25s${NC}\n" \
+        "" "NAME" "TIME" "RAW" "OUTPUT" "TOKENS" "SAVED" "PREVIEW"
+    printf "${DIM}%-2s  %-28s %6s  %8s %8s  %14s %5s  %-25s${NC}\n" \
+        "" "────" "────" "───" "──────" "──────" "─────" "───────"
+}
+
 # ─── Test Runner ──────────────────────────────────────────────────────────────
 
 run_test() {
@@ -89,13 +109,6 @@ run_test() {
         duration_str="${duration_ms}ms"
     fi
 
-    # Format size
-    local size_str
-    if [ $size -ge 1024 ]; then
-        size_str="$(echo "scale=1; $size/1024" | bc)KB"
-    else
-        size_str="${size}B"
-    fi
 
     # Determine status
     local status_icon status_color
@@ -113,44 +126,38 @@ run_test() {
         FAIL=$((FAIL + 1))
     fi
 
-    # Save stderr for stats extraction before any cleanup
-    cp "$stderr_file" "$stderr_file.saved" 2>/dev/null
-
-    # Stderr tier info (first line only)
-    local tier_info=""
+    # Parse [data] line from stderr for machine-readable stats
+    local raw_bytes=0 out_bytes=0 raw_tokens=0 out_tokens=0 saved_pct=0
     if [ -f "$stderr_file" ] && [ -s "$stderr_file" ]; then
-        tier_info=$(head -1 "$stderr_file" | sed 's/\x1b\[[0-9;]*m//g' | cut -c1-60)
-    fi
-
-    # Extract token stats from stderr
-    local tokens_str=""
-    if [ -f "$stderr_file.saved" ] && [ -s "$stderr_file.saved" ]; then
-        local stats_line
-        stats_line=$(grep '\[stats\]' "$stderr_file.saved" | head -1 | sed 's/\x1b\[[0-9;]*m//g')
-        if [ -n "$stats_line" ]; then
-            # Extract "N tokens) | XX% saved" → "N tok ↓XX%"
-            local in_tok out_tok pct
-            in_tok=$(echo "$stats_line" | grep -oP '\((\d+) tokens\)' | head -1 | grep -oP '\d+')
-            pct=$(echo "$stats_line" | grep -oP '\d+% saved' | grep -oP '\d+')
-            if [ -n "$in_tok" ] && [ -n "$pct" ]; then
-                tokens_str="${in_tok}→↓${pct}%"
-            fi
+        local data_line
+        data_line=$(grep '\[data\]' "$stderr_file" | head -1)
+        if [ -n "$data_line" ]; then
+            raw_bytes=$(echo "$data_line" | grep -oP 'raw_bytes=\K\d+')
+            out_bytes=$(echo "$data_line" | grep -oP 'out_bytes=\K\d+')
+            raw_tokens=$(echo "$data_line" | grep -oP 'raw_tokens=\K\d+')
+            out_tokens=$(echo "$data_line" | grep -oP 'out_tokens=\K\d+')
+            saved_pct=$(echo "$data_line" | grep -oP 'saved_pct=\K\d+')
         fi
     fi
+
+    local raw_str=$(format_size "$raw_bytes")
+    local out_str=$(format_size "$out_bytes")
+    local token_str="${raw_tokens}→${out_tokens}"
+    local saved_str="↓${saved_pct}%"
 
     # Preview — first non-empty content line
     local preview=""
     if [ -f "$outfile" ] && [ $size -gt 0 ]; then
-        preview=$(grep -v '^\s*$' "$outfile" 2>/dev/null | head -1 | cut -c1-30)
+        preview=$(grep -v '^\s*$' "$outfile" 2>/dev/null | head -1 | cut -c1-25)
     fi
 
-    # Console output — single tabular line
-    printf "${status_color}%s${NC}  %-35s %7s %8s  %-18s  ${DIM}%-30s${NC}\n" \
-        "$status_icon" "$name" "$duration_str" "$size_str" "$tokens_str" "$preview"
+    # Console output — tabular
+    printf "${status_color}%s${NC}  %-28s %6s  %8s %8s  %14s %5s  ${DIM}%-25s${NC}\n" \
+        "$status_icon" "$name" "$duration_str" "$raw_str" "$out_str" "$token_str" "$saved_str" "$preview"
 
     # Log output
-    printf "%-2s %-45s %8s %8s exit=%d %s\n" \
-        "$status_icon" "$name" "$duration_str" "$size_str" "$exit_code" "$tier_info" >> "$LOG"
+    printf "%-2s %-28s %6s  %8s %8s  %14s %5s  %s\n" \
+        "$status_icon" "$name" "$duration_str" "$raw_str" "$out_str" "$token_str" "$saved_str" "$preview" >> "$LOG"
 
     # Save stderr alongside output
     if [ -s "$stderr_file" ]; then
@@ -285,6 +292,7 @@ run_crawl_test() {
 section() {
     echo ""
     echo -e "${CYAN}── $1 ──${NC}"
+    print_table_header
     echo "" >> "$LOG"
     echo "── $1 ──" >> "$LOG"
 }
@@ -381,27 +389,27 @@ TEST_URL="https://kubernetes.io/docs/concepts/workloads/pods/"
 
 run_test "format/markdown" \
     "$OUT_DIR/formats/markdown.md" \
-    $RAWDOC "$TEST_URL" -f markdown
+    $RAWDOC "$TEST_URL" -f markdown -v
 
 run_test "format/text" \
     "$OUT_DIR/formats/text.txt" \
-    $RAWDOC "$TEST_URL" -f text
+    $RAWDOC "$TEST_URL" -f text -v
 
 run_test "format/json" \
     "$OUT_DIR/formats/json.json" \
-    $RAWDOC "$TEST_URL" -f json
+    $RAWDOC "$TEST_URL" -f json -v
 
 run_test "format/yaml" \
     "$OUT_DIR/formats/yaml.yaml" \
-    $RAWDOC "$TEST_URL" -f yaml
+    $RAWDOC "$TEST_URL" -f yaml -v
 
 run_test "format/code-only" \
     "$OUT_DIR/formats/code-only.md" \
-    $RAWDOC "$TEST_URL" --code-only
+    $RAWDOC "$TEST_URL" --code-only -v
 
 run_test "format/no-links" \
     "$OUT_DIR/formats/no-links.md" \
-    $RAWDOC "$TEST_URL" --no-links
+    $RAWDOC "$TEST_URL" --no-links -v
 
 # ── Crawl Mode ────────────────────────────────────────────────────────────────
 
