@@ -1,7 +1,6 @@
 package main
 
 import (
-	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
@@ -48,7 +47,6 @@ var browserHeaders = map[string]string{
 	"User-Agent":                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
 	"Accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
 	"Accept-Language":           "en-US,en;q=0.5",
-	"Accept-Encoding":           "gzip, deflate, br",
 	"DNT":                       "1",
 	"Connection":                "keep-alive",
 	"Upgrade-Insecure-Requests": "1",
@@ -199,18 +197,7 @@ func fetchTier1(rawURL string, opts *fetchOptions) (*fetchResult, error) {
 }
 
 func readBody(resp *http.Response) (string, error) {
-	var reader io.Reader = resp.Body
-
-	if resp.Header.Get("Content-Encoding") == "gzip" {
-		gz, err := gzip.NewReader(resp.Body)
-		if err != nil {
-			return "", err
-		}
-		defer gz.Close()
-		reader = gz
-	}
-
-	data, err := io.ReadAll(reader)
+	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}
