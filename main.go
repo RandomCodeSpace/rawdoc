@@ -293,6 +293,3 @@ func writeCodeOnly(w io.Writer, markdown string) error {
 	return nil
 }
 
-func runCrawl(cfg *config, u *url.URL) error {
-	return fmt.Errorf("crawl mode not implemented yet")
-}
