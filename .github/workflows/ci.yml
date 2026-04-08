@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test:
+    name: Test & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Run tests
+        id: tests
+        run: |
+          TEST_OUTPUT=$(go test -v -race -count=1 ./... 2>&1)
+          echo "$TEST_OUTPUT"
+          TEST_COUNT=$(echo "$TEST_OUTPUT" | grep -c '^--- PASS:' || true)
+          echo "test_count=$TEST_COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Build binary
+        id: build
+        run: |
+          go build -o rawdoc .
+          BINARY_SIZE=$(du -sh rawdoc | cut -f1)
+          echo "binary_size=$BINARY_SIZE" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test
+        run: |
+          ./rawdoc https://example.com -q
+          echo "Smoke test passed"
+
+      - name: Generate job summary
+        if: always()
+        env:
+          TEST_COUNT: ${{ steps.tests.outputs.test_count }}
+          BINARY_SIZE: ${{ steps.build.outputs.binary_size }}
+          COMMIT_SHA: ${{ github.sha }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          TESTS_OUTCOME: ${{ steps.tests.outcome }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+        run: |
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+          BUILD_DATE=$(date -u +"%Y-%m-%d %H:%M UTC")
+
+          if [ "$TESTS_OUTCOME" = "success" ]; then
+            TEST_STATUS="✅ Passed (${TEST_COUNT} tests)"
+          else
+            TEST_STATUS="❌ Failed"
+          fi
+
+          if [ "$BUILD_OUTCOME" = "success" ]; then
+            BUILD_STATUS="✅ Success"
+          else
+            BUILD_STATUS="❌ Failed"
+          fi
+
+          SMOKE_STATUS="✅ example.com fetched"
+
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## rawdoc CI Results
+
+          | Check | Status |
+          |-------|--------|
+          | Unit Tests | ${TEST_STATUS} |
+          | Build | ${BUILD_STATUS} |
+          | Smoke Test | ${SMOKE_STATUS} |
+          | Binary Size | ${BINARY_SIZE} |
+
+          **Build:** #${BUILD_NUMBER} | **Commit:** ${SHORT_SHA} | **Date:** ${BUILD_DATE}
+          EOF
