@@ -231,3 +231,21 @@ GOOS=darwin GOARCH=arm64 go build -o rawdoc-darwin-arm64 .
 |-------------|-------|
 | Go 1.24+ | Required to build from source |
 | Chrome / Chromium | Optional — only needed for Tier 3 (JS-rendered pages) |
+
+## Windows Antivirus Note
+
+Windows Defender may flag `rawdoc.exe` as a false positive. This happens because:
+
+- Go statically links everything into one large binary (triggers heuristic scanners)
+- `utls` dependency spoofs TLS fingerprints (anti-detection technique)
+- `go-rod` automates headless Chrome (browser automation flagged by behavior analysis)
+
+**The code is fully open source — inspect it yourself.** To work around this:
+
+```powershell
+# Option 1: Exclude the build directory
+Add-MpPreference -ExclusionPath "D:\Development\rawdoc"
+
+# Option 2: Build with stripped symbols (smaller, fewer flags)
+go build -ldflags="-s -w" -o rawdoc.exe .
+```
