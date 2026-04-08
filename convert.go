@@ -431,11 +431,9 @@ func optimizeMarkdown(s string) string {
 
 // estimateTokens gives a rough token count using the ~4 chars/token heuristic
 // typical for GPT/Claude tokenizers on English text.
-func estimateTokens(s string) int {
-	// More accurate: count words and multiply by ~1.3, but chars/4 is simpler
-	// and close enough for stats display.
-	if len(s) == 0 {
+func estimateTokens(byteCount int) int {
+	if byteCount == 0 {
 		return 0
 	}
-	return (len(s) + 3) / 4
+	return (byteCount + 3) / 4
 }

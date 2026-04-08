@@ -65,14 +65,14 @@ func logVerbose(opts *fetchOptions, format string, args ...any) {
 }
 
 func fetch(rawURL string, opts *fetchOptions) (*fetchResult, error) {
-	logVerbose(opts, "fetch: trying tier 1 for %s", rawURL)
+	logVerbose(opts, "[tier1] %s → fetching", rawURL)
 	result, err := fetchTier1(rawURL, opts)
 	if err == nil {
 		return result, nil
 	}
 
 	if isEscalatable(err) && !opts.noTLSSpoof {
-		logVerbose(opts, "fetch: escalating to tier 2 for %s (%v)", rawURL, err)
+		logVerbose(opts, "[tier1] %s → %v, escalating to tier2", rawURL, err)
 		result, err = fetchTier2(rawURL, opts)
 		if err == nil {
 			return result, nil
@@ -80,7 +80,7 @@ func fetch(rawURL string, opts *fetchOptions) (*fetchResult, error) {
 	}
 
 	if isEscalatable(err) && !opts.noHeadless {
-		logVerbose(opts, "fetch: escalating to tier 3 for %s (%v)", rawURL, err)
+		logVerbose(opts, "[tier2] %s → %v, escalating to tier3", rawURL, err)
 		result, err = fetchTier3(rawURL, opts)
 		if err == nil {
 			return result, nil
@@ -126,7 +126,7 @@ func fetchTier1(rawURL string, opts *fetchOptions) (*fetchResult, error) {
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		if attempt > 1 {
-			logVerbose(opts, "fetch tier1: retry %d/%d after %v", attempt, maxRetries, backoff)
+			logVerbose(opts, "[tier1] %s → retry %d/%d after %v", rawURL, attempt, maxRetries, backoff)
 			time.Sleep(backoff)
 			backoff *= 2
 			if backoff > 30*time.Second {
@@ -271,7 +271,7 @@ func fetchTier2(rawURL string, opts *fetchOptions) (*fetchResult, error) {
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		if attempt > 1 {
-			logVerbose(opts, "fetch tier2: retry %d/%d after %v", attempt, maxRetries, backoff)
+			logVerbose(opts, "[tier2] %s → retry %d/%d after %v", rawURL, attempt, maxRetries, backoff)
 			time.Sleep(backoff)
 			backoff *= 2
 			if backoff > 30*time.Second {

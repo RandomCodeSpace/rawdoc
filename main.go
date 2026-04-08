@@ -59,8 +59,8 @@ func main() {
 
 	flag.StringVar(&cfg.output, "o", "", "Output file or directory")
 	flag.StringVar(&cfg.output, "output", "", "Output file or directory")
-	flag.StringVar(&cfg.format, "f", "markdown", "Output format: markdown|text|json")
-	flag.StringVar(&cfg.format, "format", "markdown", "Output format: markdown|text|json")
+	flag.StringVar(&cfg.format, "f", "markdown", "Output format: markdown|text|json|yaml")
+	flag.StringVar(&cfg.format, "format", "markdown", "Output format: markdown|text|json|yaml")
 	flag.BoolVar(&cfg.codeOnly, "code-only", false, "Extract only code blocks")
 	flag.BoolVar(&cfg.noLinks, "no-links", false, "Strip link URLs, keep text only")
 
@@ -124,9 +124,9 @@ func main() {
 
 	// Validate format
 	switch cfg.format {
-	case "markdown", "text", "json":
+	case "markdown", "text", "json", "yaml":
 	default:
-		fmt.Fprintf(os.Stderr, "error: invalid format %q (use markdown, text, or json)\n", cfg.format)
+		fmt.Fprintf(os.Stderr, "error: invalid format %q (use markdown, text, json, or yaml)\n", cfg.format)
 		os.Exit(2)
 	}
 
@@ -208,57 +208,77 @@ func runSingle(cfg *config, u *url.URL) error {
 
 	content := extractContent(doc, u.Host)
 	markdown := convertToMarkdown(content)
-	preOptSize := len(markdown)
-
 	markdown = optimizeMarkdown(markdown)
-	postOptSize := len(markdown)
 
 	title := strings.TrimSpace(doc.Find("title").Text())
 	description, _ := doc.Find(`meta[name="description"]`).Attr("content")
 	description = strings.TrimSpace(description)
 
+	outputSize, err := writeOutput(cfg, result.url, title, description, markdown, result)
+	if err != nil {
+		return err
+	}
+
 	if cfg.verbose {
-		rawTokens := estimateTokens(result.html)
-		outTokens := estimateTokens(markdown)
+		rawTokens := estimateTokens(rawHTMLSize)
+		outTokens := estimateTokens(outputSize)
 		savings := 0
 		if rawTokens > 0 {
 			savings = 100 - (outTokens*100)/rawTokens
 		}
-		fmt.Fprintf(stderr, "[stats] raw HTML: %s (%d tokens) → markdown: %s (%d tokens) | %d%% reduction\n",
-			humanSize(rawHTMLSize), rawTokens, humanSize(postOptSize), outTokens, savings)
-		if preOptSize != postOptSize {
-			fmt.Fprintf(stderr, "[stats] optimize pass: %s → %s (-%s)\n",
-				humanSize(preOptSize), humanSize(postOptSize), humanSize(preOptSize-postOptSize))
+		fmt.Fprintf(stderr, "[stats] input: %s (%d tokens) → output: %s (%d tokens) | %d%% saved\n",
+			humanSize(rawHTMLSize), rawTokens, humanSize(outputSize), outTokens, savings)
+		if cfg.output != "" {
+			fmt.Fprintf(stderr, "[output] wrote %s to %s\n", cfg.format, cfg.output)
 		}
 	}
 
-	return writeOutput(cfg, result.url, title, description, markdown, result)
+	return nil
 }
 
-func writeOutput(cfg *config, pageURL, title, description, markdown string, result *fetchResult) error {
-	var w io.Writer = os.Stdout
+func writeOutput(cfg *config, pageURL, title, description, markdown string, result *fetchResult) (int, error) {
+	var buf strings.Builder
 
+	if cfg.codeOnly {
+		if err := writeCodeOnly(&buf, markdown); err != nil {
+			return 0, err
+		}
+	} else {
+		switch cfg.format {
+		case "json":
+			if err := writeJSON(&buf, pageURL, title, description, markdown, result); err != nil {
+				return 0, err
+			}
+		case "yaml":
+			if err := writeYAML(&buf, pageURL, title, description, markdown, result); err != nil {
+				return 0, err
+			}
+		case "text":
+			if err := writeText(&buf, markdown); err != nil {
+				return 0, err
+			}
+		default:
+			if err := writeMarkdown(&buf, markdown); err != nil {
+				return 0, err
+			}
+		}
+	}
+
+	output := buf.String()
+	outputSize := len(output)
+
+	var w io.Writer = os.Stdout
 	if cfg.output != "" && cfg.depth == 0 {
 		f, err := os.Create(cfg.output)
 		if err != nil {
-			return fmt.Errorf("create output file: %w", err)
+			return 0, fmt.Errorf("create output file: %w", err)
 		}
 		defer f.Close()
 		w = f
 	}
 
-	if cfg.codeOnly {
-		return writeCodeOnly(w, markdown)
-	}
-
-	switch cfg.format {
-	case "json":
-		return writeJSON(w, pageURL, title, description, markdown, result)
-	case "text":
-		return writeText(w, markdown)
-	default:
-		return writeMarkdown(w, markdown)
-	}
+	_, err := io.WriteString(w, output)
+	return outputSize, err
 }
 
 func writeMarkdown(w io.Writer, markdown string) error {
@@ -337,6 +357,46 @@ func writeJSON(w io.Writer, pageURL, title, description, markdown string, result
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(out)
+}
+
+func writeYAML(w io.Writer, pageURL, title, description, markdown string, result *fetchResult) error {
+	codeBlocks := extractCodeBlocks(markdown)
+
+	// Write YAML manually — avoids adding a yaml dependency for simple output
+	fmt.Fprintf(w, "url: %s\n", yamlQuote(pageURL))
+	fmt.Fprintf(w, "title: %s\n", yamlQuote(title))
+	fmt.Fprintf(w, "description: %s\n", yamlQuote(description))
+	fmt.Fprintf(w, "fetch_tier: %d\n", result.tier)
+	fmt.Fprintf(w, "fetched_at: %s\n", time.Now().UTC().Format(time.RFC3339))
+	fmt.Fprintf(w, "content_length: %d\n", len(markdown))
+	fmt.Fprintf(w, "content: |\n")
+	for _, line := range strings.Split(markdown, "\n") {
+		fmt.Fprintf(w, "  %s\n", line)
+	}
+	if len(codeBlocks) > 0 {
+		fmt.Fprintf(w, "code_blocks:\n")
+		for _, b := range codeBlocks {
+			fmt.Fprintf(w, "  - lang: %s\n", yamlQuote(b.Lang))
+			fmt.Fprintf(w, "    code: |\n")
+			for _, line := range strings.Split(b.Code, "\n") {
+				fmt.Fprintf(w, "      %s\n", line)
+			}
+		}
+	}
+	return nil
+}
+
+func yamlQuote(s string) string {
+	if s == "" {
+		return `""`
+	}
+	// Quote if it contains special YAML chars
+	for _, c := range s {
+		if c == ':' || c == '#' || c == '\'' || c == '"' || c == '{' || c == '}' || c == '[' || c == ']' || c == ',' || c == '&' || c == '*' || c == '!' || c == '|' || c == '>' || c == '%' || c == '@' || c == '`' {
+			return `"` + strings.ReplaceAll(strings.ReplaceAll(s, `\`, `\\`), `"`, `\"`) + `"`
+		}
+	}
+	return s
 }
 
 func writeCodeOnly(w io.Writer, markdown string) error {
