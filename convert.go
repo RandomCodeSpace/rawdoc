@@ -394,3 +394,48 @@ func cleanMarkdown(s string) string {
 	s = tripleNewlineRegexp.ReplaceAllString(s, "\n\n")
 	return strings.TrimSpace(s)
 }
+
+// Patterns for output optimization
+var (
+	// [¶](#section-anchor) — pilcrow anchors used by Go docs, MDN, etc.
+	pilcrowPattern = regexp.MustCompile(`\s*\[¶\]\([^)]*\)`)
+	// [text](#fragment) — fragment-only self-links, keep just the text
+	fragmentLinkPattern = regexp.MustCompile(`\[([^\]]+)\]\(#[^)]*\)`)
+	// Lines that are only whitespace
+	whitespaceLinePattern = regexp.MustCompile(`(?m)^[ \t]+$`)
+	// 3+ consecutive blank lines → 2
+	excessiveBlanks = regexp.MustCompile(`\n{3,}`)
+	// Trailing whitespace on lines
+	trailingWhitespace = regexp.MustCompile(`(?m)[ \t]+$`)
+)
+
+// optimizeMarkdown post-processes markdown to minimize token usage for AI agents.
+func optimizeMarkdown(s string) string {
+	// Strip pilcrow anchors: [¶](#...)
+	s = pilcrowPattern.ReplaceAllString(s, "")
+
+	// Convert fragment-only links to plain text: [text](#frag) → text
+	s = fragmentLinkPattern.ReplaceAllString(s, "$1")
+
+	// Strip trailing whitespace from lines
+	s = trailingWhitespace.ReplaceAllString(s, "")
+
+	// Collapse whitespace-only lines to empty lines
+	s = whitespaceLinePattern.ReplaceAllString(s, "")
+
+	// Collapse 3+ blank lines to 2
+	s = excessiveBlanks.ReplaceAllString(s, "\n\n")
+
+	return strings.TrimSpace(s)
+}
+
+// estimateTokens gives a rough token count using the ~4 chars/token heuristic
+// typical for GPT/Claude tokenizers on English text.
+func estimateTokens(s string) int {
+	// More accurate: count words and multiply by ~1.3, but chars/4 is simpler
+	// and close enough for stats display.
+	if len(s) == 0 {
+		return 0
+	}
+	return (len(s) + 3) / 4
+}

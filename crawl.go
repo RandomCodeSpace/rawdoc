@@ -316,7 +316,7 @@ func fetchPage(rawURL string, opts *fetchOptions, cfg *config) (crawlResult, []s
 
 	stripNoise(doc)
 	content := extractContent(doc, base.Host)
-	markdown := convertToMarkdown(content)
+	markdown := optimizeMarkdown(convertToMarkdown(content))
 	title := strings.TrimSpace(doc.Find("title").Text())
 
 	return crawlResult{

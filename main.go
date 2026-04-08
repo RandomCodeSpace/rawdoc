@@ -202,14 +202,35 @@ func runSingle(cfg *config, u *url.URL) error {
 		return fmt.Errorf("parse HTML: %w", err)
 	}
 
+	rawHTMLSize := len(result.html)
+
 	stripNoise(doc)
 
 	content := extractContent(doc, u.Host)
 	markdown := convertToMarkdown(content)
+	preOptSize := len(markdown)
+
+	markdown = optimizeMarkdown(markdown)
+	postOptSize := len(markdown)
 
 	title := strings.TrimSpace(doc.Find("title").Text())
 	description, _ := doc.Find(`meta[name="description"]`).Attr("content")
 	description = strings.TrimSpace(description)
+
+	if cfg.verbose {
+		rawTokens := estimateTokens(result.html)
+		outTokens := estimateTokens(markdown)
+		savings := 0
+		if rawTokens > 0 {
+			savings = 100 - (outTokens*100)/rawTokens
+		}
+		fmt.Fprintf(stderr, "[stats] raw HTML: %s (%d tokens) → markdown: %s (%d tokens) | %d%% reduction\n",
+			humanSize(rawHTMLSize), rawTokens, humanSize(postOptSize), outTokens, savings)
+		if preOptSize != postOptSize {
+			fmt.Fprintf(stderr, "[stats] optimize pass: %s → %s (-%s)\n",
+				humanSize(preOptSize), humanSize(postOptSize), humanSize(preOptSize-postOptSize))
+		}
+	}
 
 	return writeOutput(cfg, result.url, title, description, markdown, result)
 }
@@ -331,5 +352,17 @@ func writeCodeOnly(w io.Writer, markdown string) error {
 		fmt.Fprintf(w, "```%s\n%s```\n", lang, b.Code)
 	}
 	return nil
+}
+
+func humanSize(bytes int) string {
+	if bytes < 1024 {
+		return fmt.Sprintf("%dB", bytes)
+	}
+	kb := float64(bytes) / 1024
+	if kb < 1024 {
+		return fmt.Sprintf("%.1fKB", kb)
+	}
+	mb := kb / 1024
+	return fmt.Sprintf("%.1fMB", mb)
 }
 
