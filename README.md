@@ -148,22 +148,43 @@ Falls back to readability scoring when no selector matches.
 
 ---
 
-## Agent Integration
+## Claude Code MCP Plugin
 
-### Claude Code (`CLAUDE.md`)
+rawdoc runs as an MCP stdio server with `--serve`. Two tools are exposed:
 
-```markdown
-## Tools
+- **`rawdoc_fetch`** — fetch a single page as markdown/json/text
+- **`rawdoc_crawl`** — crawl linked pages by depth
+
+### Install
+
+```bash
+# 1. Install the binary
+go install github.com/RandomCodeSpace/rawdoc@latest
+
+# 2. Add to Claude Code settings (~/.claude/settings.json)
+```
+
+```json
+{
+  "mcpServers": {
+    "rawdoc": {
+      "type": "stdio",
+      "command": "rawdoc",
+      "args": ["--serve"]
+    }
+  }
+}
+```
+
+That's it. Restart Claude Code — `rawdoc_fetch` and `rawdoc_crawl` appear as tools.
+
+### CLI Usage (without MCP)
+
+```bash
 rawdoc <url>              — fetch docs as markdown
 rawdoc <url> --code-only  — code blocks only
 rawdoc <url> -f json      — structured output
 rawdoc <url> -d 2 -o dir/ — crawl to local directory
-```
-
-### Any Agent
-
-```bash
-result=$(rawdoc https://docs.example.com/api)
 ```
 
 ---

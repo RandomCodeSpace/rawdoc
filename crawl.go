@@ -369,6 +369,84 @@ func writeCrawlOutput(cfg *config, results []crawlResult) error {
 	return nil
 }
 
+// crawlToResults runs the crawl and returns results in-memory (for MCP server).
+func crawlToResults(cfg *config, seedURL *url.URL) []crawlResult {
+	// Temporarily set output to empty so runCrawl doesn't write files
+	origOutput := cfg.output
+	cfg.output = ""
+	cfg.quiet = true
+
+	// Reuse the same crawl internals
+	deadline := time.Now().Add(cfg.maxTime)
+	seen := newURLSet()
+	seen.add(seedURL.String())
+	queue := []crawlItem{{url: seedURL.String(), depth: 0}}
+	var results []crawlResult
+	sem := make(chan struct{}, cfg.concurrency)
+	var mu sync.Mutex
+	failureCount := 0
+
+	opts := &fetchOptions{
+		timeout: cfg.timeout, maxRetries: cfg.maxRetries, quiet: true,
+	}
+
+	for len(queue) > 0 {
+		if time.Now().After(deadline) {
+			break
+		}
+		mu.Lock()
+		if cfg.maxPages > 0 && len(results) >= cfg.maxPages {
+			mu.Unlock()
+			break
+		}
+		if failureCount >= 5 {
+			mu.Unlock()
+			break
+		}
+		mu.Unlock()
+
+		item := queue[0]
+		queue = queue[1:]
+
+		if cfg.delay > 0 && len(results) > 0 {
+			time.Sleep(cfg.delay)
+		}
+
+		sem <- struct{}{}
+		func() {
+			defer func() { <-sem }()
+			result, newLinks := fetchPage(item.url, opts, cfg)
+			mu.Lock()
+			defer mu.Unlock()
+			if result.err != nil {
+				failureCount++
+				return
+			}
+			results = append(results, result)
+			if cfg.depth == 0 || item.depth < cfg.depth {
+				for _, link := range newLinks {
+					if seen.add(link) {
+						u, err := url.Parse(link)
+						if err != nil {
+							continue
+						}
+						if cfg.include != "" && !pathMatchesGlob(u.Path, cfg.include) {
+							continue
+						}
+						if cfg.exclude != "" && pathMatchesGlob(u.Path, cfg.exclude) {
+							continue
+						}
+						queue = append(queue, crawlItem{url: link, depth: item.depth + 1})
+					}
+				}
+			}
+		}()
+	}
+
+	cfg.output = origOutput
+	return results
+}
+
 var nonAlphanumRe = regexp.MustCompile(`[^a-z0-9\-_]+`)
 
 // urlToFilename converts a URL to a safe filename (without extension).

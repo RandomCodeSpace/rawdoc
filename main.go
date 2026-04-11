@@ -81,6 +81,7 @@ func main() {
 	flag.BoolVar(&cfg.quiet, "quiet", false, "Suppress all stderr output")
 
 	showVersion := flag.Bool("version", false, "Print version")
+	serveMode := flag.Bool("serve", false, "Run as MCP stdio server")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: rawdoc <url> [flags]\n\n")
@@ -96,6 +97,11 @@ func main() {
 
 	if *showVersion {
 		fmt.Println("rawdoc " + version)
+		os.Exit(0)
+	}
+
+	if *serveMode {
+		serveMCP()
 		os.Exit(0)
 	}
 
@@ -162,7 +168,7 @@ func isBoolFlag(name string) bool {
 	boolFlags := map[string]bool{
 		"code-only": true, "no-links": true, "sitemap": true,
 		"v": true, "verbose": true, "q": true, "quiet": true,
-		"version": true,
+		"version": true, "serve": true,
 	}
 	return boolFlags[name]
 }
