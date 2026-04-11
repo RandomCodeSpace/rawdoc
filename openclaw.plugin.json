@@ -1,0 +1,23 @@
+{
+  "id": "rawdoc",
+  "name": "rawdoc",
+  "kind": "tool",
+  "description": "Fetch web pages as clean markdown for AI agents. Strips noise, extracts content, 95%+ token reduction.",
+  "version": "0.2.0",
+  "sandbox": {
+    "mode": "permissive",
+    "filesystem_access": "none",
+    "system_access": "none"
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable or disable the rawdoc plugin."
+      }
+    },
+    "additionalProperties": false
+  }
+}

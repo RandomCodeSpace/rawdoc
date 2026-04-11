@@ -8,8 +8,8 @@ dist/
 .vscode/
 .idea/
 
-# MCP configs
-.mcp.json
+# IDE
+node_modules/
 
 # OS
 .DS_Store
