@@ -4,11 +4,21 @@ Fetch web pages as clean markdown for AI coding agents.
 
 [![CI](https://github.com/RandomCodeSpace/rawdoc/actions/workflows/ci.yml/badge.svg)](https://github.com/RandomCodeSpace/rawdoc/actions/workflows/ci.yml)
 
-Single Go binary. Fetches HTML, strips noise, outputs markdown. Supports single-page fetch and multi-page crawling by depth.
+Single Go binary. Fetches HTML, strips noise, outputs markdown. Works as a CLI and as a Claude Code plugin.
 
 ---
 
 ## Install
+
+### Claude Code Plugin
+
+```
+/install-plugin RandomCodeSpace/rawdoc
+```
+
+Adds `/rawdoc` and `/rawdoc-crawl` commands plus `rawdoc_fetch` and `rawdoc_crawl` MCP tools. Requires Go installed on the machine (binary builds automatically on install).
+
+### CLI Only
 
 ```bash
 go install github.com/RandomCodeSpace/rawdoc@latest
@@ -148,43 +158,42 @@ Falls back to readability scoring when no selector matches.
 
 ---
 
-## Claude Code MCP Plugin
+## Claude Code Plugin
 
-rawdoc runs as an MCP stdio server with `--serve`. Two tools are exposed:
+### What You Get
 
-- **`rawdoc_fetch`** — fetch a single page as markdown/json/text
-- **`rawdoc_crawl`** — crawl linked pages by depth
+| Component | Name | Description |
+|-----------|------|-------------|
+| Command | `/rawdoc <url>` | Fetch a page as markdown |
+| Command | `/rawdoc-crawl <url> [depth]` | Crawl linked pages |
+| MCP Tool | `rawdoc_fetch` | Programmatic single-page fetch |
+| MCP Tool | `rawdoc_crawl` | Programmatic multi-page crawl |
 
 ### Install
 
-```bash
-# 1. Install the binary
-go install github.com/RandomCodeSpace/rawdoc@latest
-
-# 2. Add to Claude Code settings (~/.claude/settings.json)
 ```
+/install-plugin RandomCodeSpace/rawdoc
+```
+
+The setup hook builds the Go binary automatically. Requires Go 1.24+.
+
+### Manual MCP Setup (without plugin)
+
+```bash
+go install github.com/RandomCodeSpace/rawdoc@latest
+```
+
+Add to `~/.claude/settings.json`:
 
 ```json
 {
   "mcpServers": {
     "rawdoc": {
-      "type": "stdio",
       "command": "rawdoc",
       "args": ["--serve"]
     }
   }
 }
-```
-
-That's it. Restart Claude Code — `rawdoc_fetch` and `rawdoc_crawl` appear as tools.
-
-### CLI Usage (without MCP)
-
-```bash
-rawdoc <url>              — fetch docs as markdown
-rawdoc <url> --code-only  — code blocks only
-rawdoc <url> -f json      — structured output
-rawdoc <url> -d 2 -o dir/ — crawl to local directory
 ```
 
 ---

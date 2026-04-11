@@ -8,7 +8,7 @@ dist/
 .vscode/
 .idea/
 
-# IDE
+# Node
 node_modules/
 
 # OS
@@ -18,6 +18,3 @@ Thumbs.db
 # Test artifacts
 xx.md
 /tmp/
-
-# Plans (internal)
-docs/superpowers/

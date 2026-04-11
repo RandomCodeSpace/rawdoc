@@ -1,0 +1,13 @@
+{
+  "name": "rawdoc",
+  "version": "0.2.0",
+  "description": "Fetch web pages as clean markdown for AI agents. Strips noise, extracts content, 95%+ token reduction.",
+  "author": {
+    "name": "RandomCodeSpace",
+    "url": "https://github.com/RandomCodeSpace"
+  },
+  "homepage": "https://github.com/RandomCodeSpace/rawdoc",
+  "repository": "https://github.com/RandomCodeSpace/rawdoc",
+  "license": "MIT",
+  "keywords": ["rawdoc", "markdown", "web-scraper", "documentation", "mcp", "fetch"]
+}
