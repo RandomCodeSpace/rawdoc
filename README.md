@@ -4,25 +4,33 @@ Fetch web pages as clean markdown for AI coding agents.
 
 [![CI](https://github.com/RandomCodeSpace/rawdoc/actions/workflows/ci.yml/badge.svg)](https://github.com/RandomCodeSpace/rawdoc/actions/workflows/ci.yml)
 
-Single Go binary. Fetches HTML, strips noise, outputs markdown. Works as a CLI and as a Claude Code plugin.
+Single Go binary. One dependency (`x/net/html`). Fetches HTML, strips noise, outputs markdown. Works as a CLI, MCP server, and Claude Code plugin.
 
 ---
 
 ## Install
 
-### Claude Code Plugin
+### Claude Code Plugin (recommended)
 
 ```
 /install-plugin RandomCodeSpace/rawdoc
 ```
 
-Adds `/rawdoc` and `/rawdoc-crawl` commands plus `rawdoc_fetch` and `rawdoc_crawl` MCP tools. Requires Go installed on the machine (binary builds automatically on install).
+Adds `/rawdoc` and `/rawdoc-crawl` slash commands plus `rawdoc_fetch` and `rawdoc_crawl` MCP tools. The setup hook builds the binary automatically — requires Go 1.25+.
 
-### CLI Only
+### CLI
 
 ```bash
 go install github.com/RandomCodeSpace/rawdoc@latest
 ```
+
+### MCP Server
+
+```bash
+rawdoc --serve
+```
+
+Runs as a JSON-RPC stdio server implementing the [Model Context Protocol](https://modelcontextprotocol.io/). Exposes `rawdoc_fetch` and `rawdoc_crawl` tools. See [Manual MCP Setup](#manual-mcp-setup) below for configuration.
 
 ---
 
@@ -34,7 +42,7 @@ go install github.com/RandomCodeSpace/rawdoc@latest
 4. **Converts** to clean markdown (headings, code blocks, tables, lists)
 5. **Crawls** linked pages when given a depth > 0
 
-Works on server-rendered sites. JS-only SPAs (React, Next.js) are not supported.
+95%+ token reduction vs raw HTML. Works on server-rendered sites. JS-only SPAs are not supported.
 
 ---
 
@@ -61,6 +69,9 @@ rawdoc https://kubernetes.io/docs/concepts/workloads/ -d 2 -o ~/docs/k8s/
 
 # Verbose — see fetch decisions and token stats
 rawdoc https://www.baeldung.com/spring-kafka -v
+
+# MCP server mode (stdio JSON-RPC)
+rawdoc --serve
 ```
 
 ### Verbose Output
@@ -109,11 +120,12 @@ All verbose output goes to stderr. stdout stays clean for piping.
 
 ### Info
 
-| Flag | Description |
-|------|-------------|
-| `-v, --verbose` | Fetch log and token stats to stderr |
-| `-q, --quiet` | Suppress all stderr |
-| `--version` | Print version |
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-v, --verbose` | — | Fetch log and token stats to stderr |
+| `-q, --quiet` | — | Suppress all stderr |
+| `--serve` | — | Run as MCP stdio server |
+| `--version` | — | Print version |
 
 ---
 
@@ -175,9 +187,32 @@ Falls back to readability scoring when no selector matches.
 /install-plugin RandomCodeSpace/rawdoc
 ```
 
-The setup hook builds the Go binary automatically. Requires Go 1.24+.
+The setup hook builds the Go binary automatically. Requires Go 1.25+.
 
-### Manual MCP Setup (without plugin)
+### MCP Tools
+
+**`rawdoc_fetch`** — fetch a single page as markdown.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `url` | string | yes | URL to fetch |
+| `format` | string | no | `markdown` (default), `text`, `json`, `yaml` |
+| `code_only` | boolean | no | Extract only code blocks |
+
+**`rawdoc_crawl`** — crawl linked pages from a seed URL.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `url` | string | yes | Seed URL to crawl |
+| `depth` | integer | no | Crawl depth (default: 1) |
+| `max_pages` | integer | no | Max pages to fetch (default: 20) |
+| `include` | string | no | URL path glob to include |
+| `exclude` | string | no | URL path glob to exclude |
+| `concurrency` | integer | no | Parallel fetches (default: 3) |
+
+### Manual MCP Setup
+
+If you prefer to configure the MCP server manually instead of using the plugin:
 
 ```bash
 go install github.com/RandomCodeSpace/rawdoc@latest
@@ -224,7 +259,7 @@ GOOS=windows GOARCH=amd64 go build -o rawdoc.exe .
 GOOS=darwin  GOARCH=arm64 go build -o rawdoc-darwin-arm64 .
 ```
 
-**Requires:** Go 1.24+
+**Requires:** Go 1.25+ | **Dependencies:** `golang.org/x/net` (only)
 
 ---
 
