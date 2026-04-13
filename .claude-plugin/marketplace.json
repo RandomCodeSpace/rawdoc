@@ -16,10 +16,7 @@
       "author": {
         "name": "RandomCodeSpace"
       },
-      "source": {
-        "source": "github",
-        "repo": "RandomCodeSpace/rawdoc"
-      },
+      "source": "./",
       "category": "developer-tools",
       "tags": ["markdown", "web-scraper", "documentation", "mcp", "fetch"],
       "keywords": ["rawdoc", "markdown", "web-scraper", "documentation", "fetch", "crawl"]
